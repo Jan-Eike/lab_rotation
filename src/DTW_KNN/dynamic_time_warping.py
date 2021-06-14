@@ -4,20 +4,22 @@ import numpy as np
 from sklearn.neighbors import KNeighborsClassifier
 from tqdm import tqdm, trange
 from sklearn.model_selection import KFold 
+from sklearn.metrics import average_precision_score
+from save_data import save_scores
 
 
 def main():
     """main method: Runs the entire clssification process."""
     # train, test and val length are just for testing purposes, to be able to
     # cut off parts of the datasets for faster computation
-    train_length = -1
-    test_length = -1
-    val_length = -1
+    train_length = 200
+    test_length = 40
+    val_length = 100
     data = load_data(train_length, test_length, val_length)
     labvitals_time_series_list_train, labels_train = data[0], data[3]
     labvitals_time_series_list_test, labels_test = data[1], data[4]
     labvitals_time_series_list_val, labels_val = data[2], data[5]
-    k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
     best_k = find_best_k(labvitals_time_series_list_val, labels_val, k_list)
     print("best k : {}".format(best_k))
     dtw_matrices_train, dtw_matrices_test = calculate_distance_matrices(labvitals_time_series_list_train, labvitals_time_series_list_test, train_length, test_length)
@@ -35,10 +37,16 @@ def find_best_k(labvitals_time_series_list_val, labels_val, k_list):
     Returns:
         Integer: the parameter k that yielded the best result
     """
+    # create dataset to save every intermediate result
+    scores_dataframe = pd.DataFrame(columns=["k", "average acc score", "average auprc score"])
     avg_scores = []
     for k in tqdm(k_list, desc="finding best k"):
-        avg_score = cross_validate(labvitals_time_series_list_val, labels_val, k)
-        avg_scores.append(avg_score)
+        avg_acc_score, avg_auprc_score = cross_validate(labvitals_time_series_list_val, labels_val, k)
+        # save scores in dictionary for each k
+        scores_dict = {"k" : k, "average acc score" : avg_acc_score, "average auprc score" : avg_auprc_score}
+        scores_dataframe = scores_dataframe.append(scores_dict, ignore_index=True)
+        avg_scores.append(avg_auprc_score)
+    save_scores(scores_dataframe)
     max_index = np.argmax(avg_scores)
     return k_list[max_index]
 
@@ -52,10 +60,12 @@ def cross_validate(labvitals_time_series_list_val, labels_val, k):
         k (integer): parameter k that gets cross validated
 
     Returns:
-        float: mean score of all scores achieved during cross validation
+        float: mean acc_score of all scores achieved during cross validation
+        float: mean auprc_score of all scores achieved during cross validation
     """
     kf = KFold(n_splits=3, random_state=42, shuffle=True)
-    scores = []
+    scores_auprc = []
+    scores_acc = []
     # just defining a progress bar for manual control
     pbar = tqdm(total = 3, desc="Cross validating for k = {}".format(k), leave=False)
     for train_index , test_index in kf.split(labvitals_time_series_list_val):
@@ -63,11 +73,12 @@ def cross_validate(labvitals_time_series_list_val, labels_val, k):
         X_test = index_time_series_list(labvitals_time_series_list_val, test_index)
         y_train , y_test = labels_val[train_index] , labels_val[test_index]
         dtw_matrices_train, dtw_matrices_test = calculate_distance_matrices(X_train, X_test, len(X_train), len(X_test))
-        score = classify(dtw_matrices_train, dtw_matrices_test, y_train, y_test, len(X_test), best_k=k, print_res=False)
-        scores.append(score)
+        mean_score_acc, mean_score_auprc = classify(dtw_matrices_train, dtw_matrices_test, y_train, y_test, len(X_test), best_k=k, print_res=False)
+        scores_auprc.append(mean_score_auprc)
+        scores_acc.append(mean_score_acc)
         pbar.update(1)
     pbar.close()
-    return np.mean(scores)
+    return np.mean(scores_acc), np.mean(scores_auprc)
 
 
 def index_time_series_list(time_series_list, index):
@@ -219,23 +230,31 @@ def classify(dtw_matrices_train, dtw_matrices_test, labels_train, labels_test, t
         print_res (bool, optional): True if you want to print result, otherwise false. Defaults to True.
     
     Returns:
-        float: mean score of the classification
+        float: mean acc_score of the classification
+        float: mean auprc_score of the classification
     """
-    # use 'precomputed' as metrix to plug in a distance matrix instead of a set of points in some space (point matrix).
+    # use 'precomputed' as metric to plug in a distance matrix instead of a set of points in some space (point matrix).
     nbrs = KNeighborsClassifier(n_neighbors=best_k, metric='precomputed')
-    scores = []
+    scores_acc = []
+    scores_auprc = []
     for i, dtw_matrix in enumerate(dtw_matrices_train):
         nbrs.fit(dtw_matrix, labels_train)
-        score = nbrs.score(dtw_matrices_test[i].reshape(test_length,-1), labels_test)
-        scores.append(score)
+        pred_labels = nbrs.predict(dtw_matrices_test[i].reshape(test_length,-1))
+        score_auprc = average_precision_score(labels_test, pred_labels)
+        scores_auprc.append(score_auprc)
+        score_acc = nbrs.score(dtw_matrices_test[i].reshape(test_length,-1), labels_test)
+        scores_acc.append(score_acc)
         if print_res:
-            print("Channel {} prediction:  {}".format(i, nbrs.predict(dtw_matrices_test[i].reshape(test_length,-1))))
+            print("Channel {} prediction:  {}".format(i, pred_labels))
             print("Channel {} true labels: {}".format(i, labels_test))
-            print("Channel {} score:       {}".format(i, score))
-    mean_score = np.mean(scores)
+            print("Channel {} score_acc:   {}".format(i, score_acc))
+            print("Channel {} score_auprc: {}".format(i, score_auprc))
+    mean_score_acc = np.mean(scores_acc)
+    mean_score_auprc = np.mean(scores_auprc)
     if print_res:
-        print("Mean score: {}".format(mean_score))
-    return mean_score
+        print("Mean score_acc:   {}".format(mean_score_acc))
+        print("Mean score_auprc: {}".format(mean_score_auprc))
+    return mean_score_acc, mean_score_auprc
 
 
 if __name__ == "__main__":
