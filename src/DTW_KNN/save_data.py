@@ -3,7 +3,6 @@ from pymongo import MongoClient
 from bson.binary import Binary
 import json
 import pickle
-import numpy as np
 
 
 def save_labvitals():
@@ -38,11 +37,26 @@ def save_scores(scores, db_name="mongo", url="mongodb://localhost:27017/"):
         db_name (str, optional): Name of the database. Defaults to "mongo".
         url (str, optional): url to the database. Defaults to "mongodb://localhost:27017/".
     """
-    db, collection = connect_to_database("scores", db_name=db_name, url=url)
-    db.drop_collection(collection)
+    db, collection_scores = connect_to_database("scores", db_name=db_name, url=url)
+    collection_temp_scores = db["temp_scores"]
+    db.drop_collection(collection_scores)
     payload = json.loads(scores.to_json(orient='records'))
-    collection.insert_many(payload)
+    collection_scores.insert_many(payload)
+    # temp scores get deleted after all scores have been computed
+    db.drop_collection(collection_temp_scores)
 
+
+def save_temp_scores(score, db_name="mongo", url="mongodb://localhost:27017/"):
+    """saves scores for each k, until every score has been computed.
+
+    Args:
+        score (dictionary): dictionary containign the scores for a given k.
+        db_name (str, optional): Name of the database. Defaults to "mongo".
+        url (str, optional): url to the database. Defaults to "mongodb://localhost:27017/".
+    """
+    _, collection = connect_to_database("temp_scores", db_name=db_name, url=url)
+    collection.insert_one(score)
+    
 
 def save_distance_matrices(matrices, collection_name, db_name="mongo", url="mongodb://localhost:27017/"):
     """saves the distance matrices.

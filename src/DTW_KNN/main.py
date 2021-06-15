@@ -1,41 +1,83 @@
 import time
-from dynamic_time_warping import load_data, calculate_distance_matrices, classify, find_best_k
+from dynamic_time_warping import load_data, calculate_distance_matrices, classify, classify_not_precomputed
+from find_hyperparameter import find_best_k
 from save_data import load_best_k, load_distance_matrices
-from sklearn.model_selection import KFold 
+
 
 def main(use_saved_matrices=False, use_saved_k=False):
     """main method: Runs the entire clssification process."""
     # train, test and val length are just for testing purposes, to be able to
     # cut off parts of the datasets for faster computation
-    train_length = 300
-    test_length = 66
-    val_length = 200
+    train_length = -1
+    test_length = -1
+    val_length = -1
+    # list containing values for the hyperparameter k
+    # these values are going to be used for finding the best k
+    k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 16, 32, 64]
+
     start = time.time()
+
     data = load_data(train_length, test_length, val_length)
     labvitals_time_series_list_train, labels_train = data[0], data[3]
     labvitals_time_series_list_test, labels_test = data[1], data[4]
     labvitals_time_series_list_val, labels_val = data[2], data[5]
-    k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+
+    best_k = get_best_k(use_saved_k, labvitals_time_series_list_val, labels_val, k_list)
+
+    #dtw_matrices_train, dtw_matrices_test = get_distance_matrices(use_saved_matrices, labvitals_time_series_list_train,
+    #                                                              labvitals_time_series_list_test, train_length, test_length)
+
+    #classify(dtw_matrices_train, dtw_matrices_test, labels_train, labels_test, test_length, best_k=best_k)
+
+    #classify_not_precomputed(labvitals_time_series_list_train, labvitals_time_series_list_test, labels_train, labels_test, test_length, best_k=best_k, print_res=True)
+
+    end = time.time()
+    print("Time: {}".format(end - start))
+
+
+def get_best_k(use_saved_k, labvitals_time_series_list_val, labels_val, k_list):
+    """gets the best_k either from the database or from finding it 
+       with the help of the method find_best_k
+
+    Args:
+        use_saved_k (Bool): should the value be taken from the databse?
+        labvitals_time_series_list_val (List of time Series): Validation list containing time series for the labvitals
+        labels_val (List of Integers): List of validation labels
+        k_list (List of Integers): List of values for k to search for the best value for k
+
+    Returns:
+        Integer: the best k (k with highest score)
+    """
     if use_saved_k:
         best_k = load_best_k()
     else:
         best_k = find_best_k(labvitals_time_series_list_val, labels_val, k_list)
     print("best k : {}".format(best_k))
-    if use_saved_matrices:
+    return best_k
+
+
+def get_distance_matrices(use_saved_train_matrices, labvitals_time_series_list_train, labvitals_time_series_list_test, train_length, test_length):
+    """gets the distance matrices, either from the database or from calculating it
+
+    Args:
+        use_saved_train_matrices (Boolean): should the train matrices be taken from the database?
+        labvitals_time_series_list_train (List of time Series): time series for training
+        labvitals_time_series_list_test (List of time Series): time Series for testing
+        train_length (int): lnegth of the training dataset (just for testing purposes)
+        test_length (int): length of the test dataset (just for testing purposes)
+
+    Returns:
+        [type]: [description]
+    """
+    if use_saved_train_matrices:
         dtw_matrices_train = load_distance_matrices("dtw_matrices_train")
-        dtw_matrices_test = load_distance_matrices("dtw_matrices_test")
-        print(dtw_matrices_train)
+        dtw_matrices_test = calculate_distance_matrices(labvitals_time_series_list_train, labvitals_time_series_list_test,
+                                                                    train_length, test_length, save=True, test_only=True)
     else:
-        dtw_matrices_train, dtw_matrices_test = calculate_distance_matrices(labvitals_time_series_list_train, labvitals_time_series_list_test, train_length, test_length, save=True)
-    classify(dtw_matrices_train, dtw_matrices_test, labels_train, labels_test, test_length, best_k=best_k)
-    end = time.time()
-    print("Time: {}".format(end - start))
-
-
-
-
+        dtw_matrices_train, dtw_matrices_test = calculate_distance_matrices(labvitals_time_series_list_train, labvitals_time_series_list_test,
+                                                                            train_length, test_length, save=True)
+    return dtw_matrices_train, dtw_matrices_test
 
 
 if __name__ == "__main__":
     main(use_saved_matrices=False, use_saved_k=False)
-    main(use_saved_matrices=True, use_saved_k=True)
