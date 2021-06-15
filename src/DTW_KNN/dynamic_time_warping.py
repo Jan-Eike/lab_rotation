@@ -3,95 +3,8 @@ import pandas as pd
 import numpy as np
 from sklearn.neighbors import KNeighborsClassifier
 from tqdm import tqdm, trange
-from sklearn.model_selection import KFold 
 from sklearn.metrics import average_precision_score
-from save_data import save_scores, save_distance_matrices, load_distance_matrices, save_best_k, load_best_k
-import time
-
-
-def main(use_saved_matrices=False, use_saved_k=False):
-    """main method: Runs the entire clssification process."""
-    # train, test and val length are just for testing purposes, to be able to
-    # cut off parts of the datasets for faster computation
-    train_length = 300
-    test_length = 66
-    val_length = 200
-    start = time.time()
-    data = load_data(train_length, test_length, val_length)
-    labvitals_time_series_list_train, labels_train = data[0], data[3]
-    labvitals_time_series_list_test, labels_test = data[1], data[4]
-    labvitals_time_series_list_val, labels_val = data[2], data[5]
-    k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
-    if use_saved_k:
-        best_k = load_best_k()
-    else:
-        best_k = find_best_k(labvitals_time_series_list_val, labels_val, k_list)
-    print("best k : {}".format(best_k))
-    if use_saved_matrices:
-        dtw_matrices_train = load_distance_matrices("dtw_matrices_train")
-        dtw_matrices_test = load_distance_matrices("dtw_matrices_test")
-        print(dtw_matrices_train)
-    else:
-        dtw_matrices_train, dtw_matrices_test = calculate_distance_matrices(labvitals_time_series_list_train, labvitals_time_series_list_test, train_length, test_length, save=True)
-    classify(dtw_matrices_train, dtw_matrices_test, labels_train, labels_test, test_length, best_k=best_k)
-    end = time.time()
-    print("Time: {}".format(end - start))
-
-
-def find_best_k(labvitals_time_series_list_val, labels_val, k_list):
-    """finds the best parameter k for knn.
-
-    Args:
-        labvitals_time_series_list_val (list of time Series): list of time series for validation set
-        labels_val (List of integers): list of labels
-        k_list (list of integers): List containing each value k that is going to be checked
-
-    Returns:
-        Integer: the parameter k that yielded the best result
-    """
-    # create dataset to save every intermediate result
-    scores_dataframe = pd.DataFrame(columns=["k", "average acc score", "average auprc score"])
-    avg_scores = []
-    for k in tqdm(k_list, desc="finding best k"):
-        avg_acc_score, avg_auprc_score = cross_validate(labvitals_time_series_list_val, labels_val, k)
-        # save scores in dictionary for each k
-        scores_dict = {"k" : k, "average acc score" : avg_acc_score, "average auprc score" : avg_auprc_score}
-        scores_dataframe = scores_dataframe.append(scores_dict, ignore_index=True)
-        avg_scores.append(avg_auprc_score)
-    save_scores(scores_dataframe)
-    max_index = np.argmax(avg_scores)
-    save_best_k(k_list[max_index])
-    return k_list[max_index]
-
-
-def cross_validate(labvitals_time_series_list_val, labels_val, k):
-    """cross validation to compute an average score for the paramter k, using the validation set
-
-    Args:
-        labvitals_time_series_list_val (List of time Series): list of time series for validation set
-        labels_val (List of integers): List of labels
-        k (integer): parameter k that gets cross validated
-
-    Returns:
-        float: mean acc_score of all scores achieved during cross validation
-        float: mean auprc_score of all scores achieved during cross validation
-    """
-    kf = KFold(n_splits=3, random_state=42, shuffle=True)
-    scores_auprc = []
-    scores_acc = []
-    # just defining a progress bar for manual control
-    pbar = tqdm(total = 3, desc="Cross validating for k = {}".format(k), leave=False)
-    for train_index , test_index in kf.split(labvitals_time_series_list_val):
-        X_train = index_time_series_list(labvitals_time_series_list_val, train_index)
-        X_test = index_time_series_list(labvitals_time_series_list_val, test_index)
-        y_train , y_test = labels_val[train_index] , labels_val[test_index]
-        dtw_matrices_train, dtw_matrices_test = calculate_distance_matrices(X_train, X_test, len(X_train), len(X_test))
-        mean_score_acc, mean_score_auprc = classify(dtw_matrices_train, dtw_matrices_test, y_train, y_test, len(X_test), best_k=k, print_res=False)
-        scores_auprc.append(mean_score_auprc)
-        scores_acc.append(mean_score_acc)
-        pbar.update(1)
-    pbar.close()
-    return np.mean(scores_acc), np.mean(scores_auprc)
+from save_data import save_distance_matrices
 
 
 def index_time_series_list(time_series_list, index):
@@ -184,7 +97,7 @@ def get_labels(labvitals_time_series_list):
     return labels
 
 
-def calculate_distance_matrices(labvitals_time_series_list_train, labvitals_time_series_list_test, train_length, test_length, save=False):
+def calculate_distance_matrices(labvitals_time_series_list_train, labvitals_time_series_list_test, train_length, test_length, save=False, test_only=False):
     """calculates dtw-distance matrices for both train and test set
 
     Args:
@@ -192,15 +105,19 @@ def calculate_distance_matrices(labvitals_time_series_list_train, labvitals_time
         labvitals_time_series_list_test (List of time Series): time Series for testing
         train_length (int): length of training dataset (just for testing purposes)
         test_length (int): length of test dataset (just for testing purposes)
+        save (bool, optional): Save matrices or not. Defaults to False.
+        test_only (bool, optional): Calculate test matrices only. Defaults to False.
 
     Returns:
         both lists of dtw-distance matrices
     """
+    if test_only:
+        dtw_matrices_test = dtw_distance_per_channel(labvitals_time_series_list_train[:train_length], labvitals_time_series_list_test[:test_length], name="test")
+        return dtw_matrices_test
     dtw_matrices_train = dtw_distance_per_channel(labvitals_time_series_list_train[:train_length], labvitals_time_series_list_train[:train_length], name="train")
     dtw_matrices_test = dtw_distance_per_channel(labvitals_time_series_list_train[:train_length], labvitals_time_series_list_test[:test_length], name="test")
     if save:
         save_distance_matrices(dtw_matrices_train, "dtw_matrices_train")
-        save_distance_matrices(dtw_matrices_test, "dtw_matrices_test")
     return dtw_matrices_train, dtw_matrices_test
 
 
@@ -227,6 +144,7 @@ def dtw_distance_per_channel(labvitals_time_series_list_1, labvitals_time_series
         dynamic_time_warping_distance_matrix = np.zeros((N,M))
         for i, time_series_1 in enumerate(tqdm(labvitals_time_series_list_1, desc="claculating dtw-distance for one channel", leave=False)):
             for j, time_series_2 in enumerate(labvitals_time_series_list_2):
+                # iloc[:, channel] takes the entire column with the number channel
                 dynamic_time_warping_distance_matrix[i,j] = dtw(time_series_1.iloc[:, 6:].iloc[:, channel], time_series_2.iloc[:, 6:].iloc[:, channel])
         dynamic_time_warping_distance_matrices.append(dynamic_time_warping_distance_matrix)
     return dynamic_time_warping_distance_matrices
@@ -273,6 +191,33 @@ def classify(dtw_matrices_train, dtw_matrices_test, labels_train, labels_test, t
     return mean_score_acc, mean_score_auprc
 
 
-if __name__ == "__main__":
-    main(use_saved_matrices=False, use_saved_k=False)
-    main(use_saved_matrices=True, use_saved_k=True)
+def classify_not_precomputed(labvitals_list_train, labvitals_list_test, labels_train, labels_test, test_length, best_k=3, print_res=True):
+    nbrs = KNeighborsClassifier(n_neighbors=best_k, metric=dtw)
+    scores_acc = []
+    scores_auprc = []
+
+    number_of_channels = labvitals_list_train[0].iloc[:, 6:].shape[1]
+    for channel in trange(number_of_channels, desc="claculating dtw-distance", leave=False):
+        for i, time_series_train in enumerate(tqdm(labvitals_list_train, desc="claculating dtw-distance for one channel", leave=False)):
+            for j, time_series_test in enumerate(labvitals_list_test):
+                time_series_train = np.array(time_series_train.iloc[:, 6:].iloc[:, channel]).reshape(-1, 1)
+                print(labels_train.shape)
+                nbrs.fit(time_series_train, labels_train[channel*time_series_train.shape[0]:(channel+1)*time_series_train.shape[0]])
+                print(time_series_test.iloc[:, 6:].iloc[:, channel].shape)
+                print(time_series_train.shape, np.array(time_series_test.iloc[:, 6:].iloc[:, channel]).reshape(1,-1).shape)
+                pred_labels = nbrs.predict(np.array(time_series_test.iloc[:, 6:].iloc[:, channel]).reshape(1,-1))
+                score_auprc = average_precision_score(labels_test, pred_labels)
+                scores_auprc.append(score_auprc)
+                score_acc = nbrs.score(time_series_test.iloc[:, 6:].reshape(test_length,-1), labels_test)
+                scores_acc.append(score_acc)
+                if print_res:
+                    print("Channel {} prediction:  {}".format(i, pred_labels))
+                    print("Channel {} true labels: {}".format(i, labels_test))
+                    print("Channel {} score_acc:   {}".format(i, score_acc))
+                    print("Channel {} score_auprc: {}".format(i, score_auprc))
+    mean_score_acc = np.mean(scores_acc)
+    mean_score_auprc = np.mean(scores_auprc)
+    if print_res:
+        print("Mean score_acc:   {}".format(mean_score_acc))
+        print("Mean score_auprc: {}".format(mean_score_auprc))
+    return mean_score_acc, mean_score_auprc
