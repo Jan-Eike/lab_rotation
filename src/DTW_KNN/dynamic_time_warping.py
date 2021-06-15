@@ -5,25 +5,37 @@ from sklearn.neighbors import KNeighborsClassifier
 from tqdm import tqdm, trange
 from sklearn.model_selection import KFold 
 from sklearn.metrics import average_precision_score
-from save_data import save_scores
+from save_data import save_scores, save_distance_matrices, load_distance_matrices, save_best_k, load_best_k
+import time
 
 
-def main():
+def main(use_saved_matrices=False, use_saved_k=False):
     """main method: Runs the entire clssification process."""
     # train, test and val length are just for testing purposes, to be able to
     # cut off parts of the datasets for faster computation
-    train_length = 200
-    test_length = 40
-    val_length = 100
+    train_length = 300
+    test_length = 66
+    val_length = 200
+    start = time.time()
     data = load_data(train_length, test_length, val_length)
     labvitals_time_series_list_train, labels_train = data[0], data[3]
     labvitals_time_series_list_test, labels_test = data[1], data[4]
     labvitals_time_series_list_val, labels_val = data[2], data[5]
     k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
-    best_k = find_best_k(labvitals_time_series_list_val, labels_val, k_list)
+    if use_saved_k:
+        best_k = load_best_k()
+    else:
+        best_k = find_best_k(labvitals_time_series_list_val, labels_val, k_list)
     print("best k : {}".format(best_k))
-    dtw_matrices_train, dtw_matrices_test = calculate_distance_matrices(labvitals_time_series_list_train, labvitals_time_series_list_test, train_length, test_length)
+    if use_saved_matrices:
+        dtw_matrices_train = load_distance_matrices("dtw_matrices_train")
+        dtw_matrices_test = load_distance_matrices("dtw_matrices_test")
+        print(dtw_matrices_train)
+    else:
+        dtw_matrices_train, dtw_matrices_test = calculate_distance_matrices(labvitals_time_series_list_train, labvitals_time_series_list_test, train_length, test_length, save=True)
     classify(dtw_matrices_train, dtw_matrices_test, labels_train, labels_test, test_length, best_k=best_k)
+    end = time.time()
+    print("Time: {}".format(end - start))
 
 
 def find_best_k(labvitals_time_series_list_val, labels_val, k_list):
@@ -48,6 +60,7 @@ def find_best_k(labvitals_time_series_list_val, labels_val, k_list):
         avg_scores.append(avg_auprc_score)
     save_scores(scores_dataframe)
     max_index = np.argmax(avg_scores)
+    save_best_k(k_list[max_index])
     return k_list[max_index]
 
 
@@ -171,7 +184,7 @@ def get_labels(labvitals_time_series_list):
     return labels
 
 
-def calculate_distance_matrices(labvitals_time_series_list_train, labvitals_time_series_list_test, train_length, test_length):
+def calculate_distance_matrices(labvitals_time_series_list_train, labvitals_time_series_list_test, train_length, test_length, save=False):
     """calculates dtw-distance matrices for both train and test set
 
     Args:
@@ -185,6 +198,9 @@ def calculate_distance_matrices(labvitals_time_series_list_train, labvitals_time
     """
     dtw_matrices_train = dtw_distance_per_channel(labvitals_time_series_list_train[:train_length], labvitals_time_series_list_train[:train_length], name="train")
     dtw_matrices_test = dtw_distance_per_channel(labvitals_time_series_list_train[:train_length], labvitals_time_series_list_test[:test_length], name="test")
+    if save:
+        save_distance_matrices(dtw_matrices_train, "dtw_matrices_train")
+        save_distance_matrices(dtw_matrices_test, "dtw_matrices_test")
     return dtw_matrices_train, dtw_matrices_test
 
 
@@ -258,4 +274,5 @@ def classify(dtw_matrices_train, dtw_matrices_test, labels_train, labels_test, t
 
 
 if __name__ == "__main__":
-    main()
+    main(use_saved_matrices=False, use_saved_k=False)
+    main(use_saved_matrices=True, use_saved_k=True)
