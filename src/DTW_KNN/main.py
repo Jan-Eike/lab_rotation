@@ -1,5 +1,5 @@
 import time
-from dynamic_time_warping import load_data, calculate_distance_matrices, classify, classify_not_precomputed
+from dynamic_time_warping import load_data, calculate_distance_matrices, classify, classify_precomputed
 from find_hyperparameter import find_best_k
 from save_data import load_best_k, load_distance_matrices
 
@@ -8,8 +8,8 @@ def main(use_saved_matrices=False, use_saved_k=False):
     """main method: Runs the entire clssification process."""
     # train, test and val length are just for testing purposes, to be able to
     # cut off parts of the datasets for faster computation
-    train_length = -1
-    test_length = -1
+    train_length = 1000
+    test_length = 250
     val_length = -1
     # list containing values for the hyperparameter k
     # these values are going to be used for finding the best k
@@ -27,9 +27,9 @@ def main(use_saved_matrices=False, use_saved_k=False):
     #dtw_matrices_train, dtw_matrices_test = get_distance_matrices(use_saved_matrices, labvitals_time_series_list_train,
     #                                                              labvitals_time_series_list_test, train_length, test_length)
 
-    #classify(dtw_matrices_train, dtw_matrices_test, labels_train, labels_test, test_length, best_k=best_k)
+    #classify_precomputed(dtw_matrices_train, dtw_matrices_test, labels_train, labels_test, test_length, best_k=best_k)
 
-    #classify_not_precomputed(labvitals_time_series_list_train, labvitals_time_series_list_test, labels_train, labels_test, test_length, best_k=best_k, print_res=True)
+    classify(labvitals_time_series_list_train, labvitals_time_series_list_test, labels_train, labels_test, test_length, best_k=best_k, print_res=True)
 
     end = time.time()
     print("Time: {}".format(end - start))
@@ -80,4 +80,4 @@ def get_distance_matrices(use_saved_train_matrices, labvitals_time_series_list_t
 
 
 if __name__ == "__main__":
-    main(use_saved_matrices=False, use_saved_k=False)
+    main(use_saved_matrices=True, use_saved_k=True)

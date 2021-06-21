@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from sklearn.neighbors import KNeighborsClassifier
 from tqdm import tqdm, trange
-from sklearn.metrics import average_precision_score
+from sklearn.metrics import average_precision_score, roc_auc_score
 from save_data import save_distance_matrices
 
 
@@ -150,7 +150,7 @@ def dtw_distance_per_channel(labvitals_time_series_list_1, labvitals_time_series
     return dynamic_time_warping_distance_matrices
 
 
-def classify(dtw_matrices_train, dtw_matrices_test, labels_train, labels_test, test_length, best_k=4, print_res=True):
+def classify_precomputed(dtw_matrices_train, dtw_matrices_test, labels_train, labels_test, test_length, best_k=4, print_res=True):
     """
     classifies the data
 
@@ -191,33 +191,64 @@ def classify(dtw_matrices_train, dtw_matrices_test, labels_train, labels_test, t
     return mean_score_acc, mean_score_auprc
 
 
-def classify_not_precomputed(labvitals_list_train, labvitals_list_test, labels_train, labels_test, test_length, best_k=3, print_res=True):
-    nbrs = KNeighborsClassifier(n_neighbors=best_k, metric=dtw)
-    scores_acc = []
-    scores_auprc = []
+def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_test, best_k=5, print_res=True):
+    """classifies the test data wrt the given train data
 
+    Args:
+        labvitals_list_train (List of time Series): List of time series for training
+        labvitals_list_test (List of time Series): List of time series for testing
+        labels_train (List of Integers): training labels
+        labels_test (List of Integers): testing labels
+        best_k (int, optional): number of nearest neighbors. Defaults to 5.
+        print_res (bool, optional): Print results or not. Defaults to True.
+
+    Returns:
+        float: mean auprc score
+        float: mean roc auc score
+    """
     number_of_channels = labvitals_list_train[0].iloc[:, 6:].shape[1]
-    for channel in trange(number_of_channels, desc="claculating dtw-distance", leave=False):
-        for i, time_series_train in enumerate(tqdm(labvitals_list_train, desc="claculating dtw-distance for one channel", leave=False)):
-            for j, time_series_test in enumerate(labvitals_list_test):
-                time_series_train = np.array(time_series_train.iloc[:, 6:].iloc[:, channel]).reshape(-1, 1)
-                print(labels_train.shape)
-                nbrs.fit(time_series_train, labels_train[channel*time_series_train.shape[0]:(channel+1)*time_series_train.shape[0]])
-                print(time_series_test.iloc[:, 6:].iloc[:, channel].shape)
-                print(time_series_train.shape, np.array(time_series_test.iloc[:, 6:].iloc[:, channel]).reshape(1,-1).shape)
-                pred_labels = nbrs.predict(np.array(time_series_test.iloc[:, 6:].iloc[:, channel]).reshape(1,-1))
-                score_auprc = average_precision_score(labels_test, pred_labels)
-                scores_auprc.append(score_auprc)
-                score_acc = nbrs.score(time_series_test.iloc[:, 6:].reshape(test_length,-1), labels_test)
-                scores_acc.append(score_acc)
-                if print_res:
-                    print("Channel {} prediction:  {}".format(i, pred_labels))
-                    print("Channel {} true labels: {}".format(i, labels_test))
-                    print("Channel {} score_acc:   {}".format(i, score_acc))
-                    print("Channel {} score_auprc: {}".format(i, score_auprc))
-    mean_score_acc = np.mean(scores_acc)
+    scores_auprc = []
+    scores_auc = []
+    for channel in trange(number_of_channels, desc="Classify channel"):
+        score_auprc, score_roc_auc, pred_labels = knn(labvitals_list_train, labvitals_list_test, labels_train, labels_test, channel, k=best_k)
+        scores_auprc.append(score_auprc)
+        scores_auc.append(score_roc_auc)
     mean_score_auprc = np.mean(scores_auprc)
+    mean_score_roc_auc = np.mean(scores_auc)
     if print_res:
-        print("Mean score_acc:   {}".format(mean_score_acc))
         print("Mean score_auprc: {}".format(mean_score_auprc))
-    return mean_score_acc, mean_score_auprc
+        print("Mean score_roc_auc:   {}".format(mean_score_roc_auc))
+    return mean_score_auprc, mean_score_roc_auc
+
+
+def knn(time_series_list_train, time_series_list_test, labels_train, labels_test, channel, k=5):
+    """perfomrs K nearest neighbors for the given train and test set.
+
+    Args:
+        time_series_list_train (List of time Series): List of time series for training
+        time_series_list_test (List of time Series): List of time series for testing
+        labels_train (List of Integers): training labels
+        labels_test (List of Integers): testing labels
+        channel (Integer): current channel of the time series
+        k (int, optional): number of nearest neighbors. Defaults to 5.
+
+    Returns:
+        float: auprc score
+        float: roc auc score
+        List of Integers: List of predicted labels
+    """
+    pred_labels = []
+    for i, time_series_test in enumerate(tqdm(time_series_list_test, desc="Calculating DTW distance from test data to train data", leave=False)):
+        distances = []
+        for time_series_train in tqdm(time_series_list_train, desc="Calculating DTW distance to test Point {}".format(i), leave=False):
+            distances.append(dtw(time_series_test.iloc[:, 6:].iloc[:, channel], time_series_train.iloc[:, 6:].iloc[:, channel]))
+
+        nearest_neighbor_id = np.argsort(distances)[:k]
+        pred_label = labels_train[nearest_neighbor_id]
+        pred_label = np.bincount(pred_label).argmax()
+        pred_labels.append(pred_label)
+
+    score_auprc = average_precision_score(labels_test, pred_labels)
+    score_roc_auc = roc_auc_score(labels_test, pred_labels)
+
+    return score_auprc, score_roc_auc, pred_labels
