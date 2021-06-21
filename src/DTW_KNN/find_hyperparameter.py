@@ -3,7 +3,7 @@ import pandas as pd
 from save_data import save_best_k, save_scores, save_temp_scores
 import numpy as np
 from sklearn.model_selection import KFold 
-from dynamic_time_warping import calculate_distance_matrices, classify, index_time_series_list
+from classification import calculate_distance_matrices, classify, index_time_series_list
 
 
 def find_best_k(labvitals_time_series_list_val, labels_val, k_list):
@@ -42,22 +42,23 @@ def cross_validate(labvitals_time_series_list_val, labels_val, k):
         k (integer): parameter k that gets cross validated
 
     Returns:
-        float: mean acc_score of all scores achieved during cross validation
+        float: mean roc_auc_score of all scores achieved during cross validation
         float: mean auprc_score of all scores achieved during cross validation
     """
-    kf = KFold(n_splits=2, random_state=42, shuffle=True)
+    splits = 3
+    kf = KFold(n_splits=splits, random_state=42, shuffle=True)
     scores_auprc = []
-    scores_acc = []
+    scores_roc_auc = []
     # just defining a progress bar for manual control
-    pbar = tqdm(total = 2, desc="Cross validating for k = {}".format(k), leave=False)
+    pbar = tqdm(total=splits, desc="Cross validating for k = {}".format(k), leave=False)
     for train_index , test_index in kf.split(labvitals_time_series_list_val):
         X_train = index_time_series_list(labvitals_time_series_list_val, train_index)
         X_test = index_time_series_list(labvitals_time_series_list_val, test_index)
         y_train , y_test = labels_val[train_index] , labels_val[test_index]
-        dtw_matrices_train, dtw_matrices_test = calculate_distance_matrices(X_train, X_test, len(X_train), len(X_test))
-        mean_score_acc, mean_score_auprc = classify(dtw_matrices_train, dtw_matrices_test, y_train, y_test, len(X_test), best_k=k, print_res=False)
+        #dtw_matrices_train, dtw_matrices_test = calculate_distance_matrices(X_train, X_test, len(X_train), len(X_test))
+        mean_score_roc_auc, mean_score_auprc = classify(X_train, X_test, y_train, y_test, best_k=k, print_res=False)
         scores_auprc.append(mean_score_auprc)
-        scores_acc.append(mean_score_acc)
+        scores_roc_auc.append(mean_score_roc_auc)
         pbar.update(1)
     pbar.close()
-    return np.mean(scores_acc), np.mean(scores_auprc)
+    return np.mean(scores_roc_auc), np.mean(scores_auprc)
