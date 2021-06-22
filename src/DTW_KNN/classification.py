@@ -6,7 +6,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from tqdm import tqdm, trange
 from sklearn.metrics import average_precision_score, roc_auc_score
 from dtaidistance import dtw
-from dtaidistance import dtw_visualisation as dtwvis
+from tslearn import metrics
 from save_data import save_distance_matrices, save_classification_data, load_classification_data, delete_classification_data, save_current_test_data
 
 
@@ -270,8 +270,8 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
         best_paths_per_test = []
         for time_series_train in tqdm(time_series_list_train, desc="Calculating DTW distance for one test point", leave=False):
             # distance from one test point to all training points
-            d, paths = dtw.warping_paths(np.array(time_series_test.iloc[:, 6:].iloc[:, channel]), np.array(time_series_train.iloc[:, 6:].iloc[:, channel]))
-            best_path = dtw.best_path(paths)
+            best_path, d = metrics.dtw_path(np.array(time_series_test.iloc[:, 6:].iloc[:, channel]), np.array(time_series_train.iloc[:, 6:].iloc[:, channel]))
+            #best_path = dtw.best_path(paths)
             best_paths_per_test.append(best_path)
             distances.append(d)
 
@@ -328,13 +328,3 @@ def plot_time_series(k_nearest_time_series, number_of_channels):
             #ax.set_yticklabels(yvalue, fontsize=5)
             ax.set_title(channel_p, fontsize=5)
         plt.show()
-
-
-def plot_explain(k_nearest_time_series, labvitals_list_test, best_paths, channel):
-    time_series_1 = np.array(k_nearest_time_series[0][0].iloc[:, 6:].iloc[:, [channel]], dtype='float64').reshape(-1,)
-    time_series_2 = np.array(labvitals_list_test[0].iloc[:, 6:].iloc[:, [channel]], dtype='float64').reshape(-1,)
-    # the first 0 stands for the current test point when this will be done automatically in the end
-    print(k_nearest_time_series[0][0].iloc[:, 6:].iloc[:, [channel]])
-    print(labvitals_list_test[0].iloc[:, 6:].iloc[:, [channel]])
-    dtwvis.plot_warping(time_series_2, time_series_1, best_paths[0])
-    plt.show()
