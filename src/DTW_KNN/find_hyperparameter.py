@@ -6,7 +6,7 @@ from sklearn.model_selection import KFold
 from classification import calculate_distance_matrices, classify, index_time_series_list
 
 
-def find_best_k(labvitals_time_series_list_val, labels_val, k_list):
+def find_best_k(labvitals_time_series_list_val, labels_val, k_list, save=True):
     """finds the best parameter k for knn.
 
     Args:
@@ -26,10 +26,13 @@ def find_best_k(labvitals_time_series_list_val, labels_val, k_list):
         scores_dict = {"k" : k, "average acc score" : avg_acc_score, "average auprc score" : avg_auprc_score}
         scores_dataframe = scores_dataframe.append(scores_dict, ignore_index=True)
         avg_scores.append(avg_auprc_score)
-        save_temp_scores(scores_dict)
-    save_scores(scores_dataframe)
+        if save:
+            save_temp_scores(scores_dict)
+    if save:
+        save_scores(scores_dataframe)
     max_index = np.argmax(avg_scores)
-    save_best_k(k_list[max_index])
+    if save:
+        save_best_k(k_list[max_index])
     return k_list[max_index]
 
 
@@ -45,7 +48,7 @@ def cross_validate(labvitals_time_series_list_val, labels_val, k):
         float: mean roc_auc_score of all scores achieved during cross validation
         float: mean auprc_score of all scores achieved during cross validation
     """
-    splits = 3
+    splits = 4
     kf = KFold(n_splits=splits, random_state=42, shuffle=True)
     scores_auprc = []
     scores_roc_auc = []

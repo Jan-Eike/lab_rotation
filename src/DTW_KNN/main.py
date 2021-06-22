@@ -7,16 +7,19 @@ import click
 @click.command()
 @click.option('--use_saved_matrices', default=False, help='Want to use saved distance matrices from earlier calls?')
 @click.option('--use_saved_k', default=False, help='Want to use saved best k from earlier calls?')
-def main(use_saved_matrices=False, use_saved_k=False):
+@click.option('--train_length', default=-1, help='Length of the train dataset. Use entire train set with -1 (default).')
+@click.option('--test_length', default=-1, help='Length of the test dataset. Use entire test set with -1 (default).')
+@click.option('--val_length', default=-1, help='Length of the validation dataset. Use entire validation set with -1 (default).')
+@click.option('--explain', default=False, help='Want to explain the results?')
+def main(use_saved_matrices=False, use_saved_k=False, train_length=-1, val_length=-1, test_length=-1, explain=False):
     """main method: Runs the entire clssification process."""
-    # train, test and val length are just for testing purposes, to be able to
-    # cut off parts of the datasets for faster computation
-    train_length = 2500
-    test_length = 625
-    val_length = 250
+    train_length = int(train_length)
+    test_length = int(test_length)
+    val_length = int(val_length)
+
     # list containing values for the hyperparameter k
     # these values are going to be used for finding the best k
-    k_list = [1, 3, 5, 7, 9, 11, 13, 15, 33, 65, 129]
+    k_list = [1, 3, 5, 7, 9, 11, 13, 15, 17]
 
     start = time.time()
 
@@ -32,7 +35,7 @@ def main(use_saved_matrices=False, use_saved_k=False):
 
     #classify_precomputed(dtw_matrices_train, dtw_matrices_test, labels_train, labels_test, test_length, best_k=best_k)
 
-    classify(labvitals_time_series_list_train, labvitals_time_series_list_test, labels_train, labels_test, best_k=best_k, print_res=True)
+    classify(labvitals_time_series_list_train, labvitals_time_series_list_test, labels_train, labels_test, best_k=best_k, print_res=True, explain=explain)
 
     end = time.time()
     print("Time: {}".format(end - start))

@@ -1,9 +1,12 @@
-from tslearn.metrics import dtw
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 from sklearn.neighbors import KNeighborsClassifier
 from tqdm import tqdm, trange
 from sklearn.metrics import average_precision_score, roc_auc_score
+from dtaidistance import dtw
+from dtaidistance import dtw_visualisation as dtwvis
 from save_data import save_distance_matrices
 
 
@@ -194,7 +197,7 @@ def classify_precomputed(dtw_matrices_train, dtw_matrices_test, labels_train, la
     return mean_score_acc, mean_score_auprc
 
 
-def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_test, best_k=5, print_res=True):
+def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_test, best_k=5, print_res=True, explain=False):
     """classifies the test data wrt the given train data
 
     Args:
@@ -204,6 +207,7 @@ def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_tes
         labels_test (List of Integers): testing labels
         best_k (int, optional): number of nearest neighbors. Defaults to 5.
         print_res (bool, optional): Print results or not. Defaults to True.
+        explain (bool, optional): Print k nearest neighbors to explain decision. Defaults to False.
 
     Returns:
         float: mean auprc score
@@ -213,15 +217,22 @@ def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_tes
     number_of_channels = labvitals_list_train[0].iloc[:, 6:].shape[1]
     scores_auprc = []
     scores_auc = []
-    for channel in trange(number_of_channels, desc="Classify channel", leave=False):
-        score_auprc, score_roc_auc, pred_labels = knn(labvitals_list_train, labvitals_list_test, labels_train, labels_test, channel, k=best_k)
+    for channel in trange(number_of_channels, desc="Classify each channel", leave=False):
+        score_auprc, score_roc_auc, pred_labels, k_nearest_time_series, best_paths = knn(labvitals_list_train, 
+                                                                                                  labvitals_list_test, 
+                                                                                                  labels_train, labels_test, 
+                                                                                                  channel, k=best_k)
         scores_auprc.append(score_auprc)
         scores_auc.append(score_roc_auc)
+
+        if explain:
+            plot_explain(k_nearest_time_series, labvitals_list_test, best_paths, channel)
+            
     mean_score_auprc = np.mean(scores_auprc)
     mean_score_roc_auc = np.mean(scores_auc)
     if print_res:
-        print("Mean score_auprc: {}".format(mean_score_auprc))
-        print("Mean score_roc_auc:   {}".format(mean_score_roc_auc))
+        print("Mean score_auprc:   {}".format(mean_score_auprc))
+        print("Mean score_roc_auc: {}".format(mean_score_roc_auc))
     return mean_score_auprc, mean_score_roc_auc
 
 
@@ -242,17 +253,70 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
         List of Integers: List of predicted labels
     """
     pred_labels = []
-    for i, time_series_test in enumerate(tqdm(time_series_list_test, desc="Calculating DTW distance from test data to train data", leave=False)):
+    k_nearest_time_series = []
+    best_paths = []
+    for time_series_test in tqdm(time_series_list_test, desc="Calculating DTW distance from test data to train data", leave=False):
         distances = []
-        for time_series_train in time_series_list_train:
-            distances.append(dtw(time_series_test.iloc[:, 6:].iloc[:, channel], time_series_train.iloc[:, 6:].iloc[:, channel]))
+        best_paths_per_test = []
+        for time_series_train in tqdm(time_series_list_train, desc="Calculating DTW distance for one test point", leave=False):
+            # distance from one test point to all training points
+            d, paths = dtw.warping_paths(np.array(time_series_test.iloc[:, 6:].iloc[:, channel]), np.array(time_series_train.iloc[:, 6:].iloc[:, channel]))
+            best_path = dtw.best_path(paths)
+            best_paths_per_test.append(best_path)
+            distances.append(d)
 
         nearest_neighbor_id = np.argsort(distances)[:k]
+        k_nearest_time_series.append(index_time_series_list(time_series_list_train, nearest_neighbor_id))
+        best_paths.append(index_time_series_list(best_paths_per_test, nearest_neighbor_id))
         pred_label = labels_train[nearest_neighbor_id]
+        # finds most frequent occurring label 
         pred_label = np.bincount(pred_label).argmax()
         pred_labels.append(pred_label)
 
     score_auprc = average_precision_score(labels_test, pred_labels)
     score_roc_auc = roc_auc_score(labels_test, pred_labels)
 
-    return score_auprc, score_roc_auc, pred_labels
+    # k_nearest_time_series:
+    # [[nn_1, ..., nn_k], ..., [nn_1, ..., nn_k]]
+    # one list for each test point 
+    return score_auprc, score_roc_auc, np.array(pred_labels), k_nearest_time_series, best_paths[0]
+
+
+def plot_time_series(k_nearest_time_series, number_of_channels):
+    plt.style.use('seaborn')
+    for i, time_series in enumerate(k_nearest_time_series):
+        print()
+        print("Time Series {}:\n {}".format(i, time_series[0].iloc[:, 6:]))
+        print()
+        sqrtn = int(np.ceil(np.sqrt(number_of_channels)))
+        fig = plt.figure(figsize=(sqrtn*2, sqrtn*2), dpi=300)
+        fig.tight_layout()
+        fig.subplots_adjust(wspace=0.5, hspace=0.9)
+        sqrtn1 = sqrtn
+        sqrtn2 = sqrtn
+        # don't want the figure to be too wide
+        if sqrtn >= 5:
+            sqrtn1 = 4
+            sqrtn2 = int(np.ceil((sqrtn * sqrtn) / sqrtn1))
+        gs = gridspec.GridSpec(sqrtn2, sqrtn1)
+        for i, channel_p in enumerate(time_series[0].iloc[:, 6:]):
+            ax = plt.subplot(gs[i])
+            ax.axes.get_xaxis().set_visible(False)
+            ax.axes.get_yaxis().set_visible(False)
+            xvalue = time_series[0]["chart_time"]
+            yvalue = time_series[0].iloc[:, 6:][channel_p]
+            ax.plot(xvalue, yvalue, linewidth=0.5, marker="s", markersize=1.5)
+            #ax.set_xticklabels(xvalue, fontsize=5)
+            #ax.set_yticklabels(yvalue, fontsize=5)
+            ax.set_title(channel_p, fontsize=5)
+        plt.show()
+
+
+def plot_explain(k_nearest_time_series, labvitals_list_test, best_paths, channel):
+    time_series_1 = np.array(k_nearest_time_series[0][0].iloc[:, 6:].iloc[:, [channel]], dtype='float64').reshape(-1,)
+    time_series_2 = np.array(labvitals_list_test[0].iloc[:, 6:].iloc[:, [channel]], dtype='float64').reshape(-1,)
+    # the first 0 stands for the current test point when this will be done automatically in the end
+    print(k_nearest_time_series[0][0].iloc[:, 6:].iloc[:, [channel]])
+    print(labvitals_list_test[0].iloc[:, 6:].iloc[:, [channel]])
+    dtwvis.plot_warping(time_series_2, time_series_1, best_paths[0])
+    plt.show()
