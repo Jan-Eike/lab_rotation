@@ -7,7 +7,7 @@ from tqdm import tqdm, trange
 from sklearn.metrics import average_precision_score, roc_auc_score
 from dtaidistance import dtw
 from dtaidistance import dtw_visualisation as dtwvis
-from save_data import save_distance_matrices
+from save_data import save_distance_matrices, save_classification_data, load_classification_data, delete_classification_data
 
 
 def index_time_series_list(time_series_list, index):
@@ -197,7 +197,7 @@ def classify_precomputed(dtw_matrices_train, dtw_matrices_test, labels_train, la
     return mean_score_acc, mean_score_auprc
 
 
-def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_test, best_k=5, print_res=True, explain=False):
+def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_test, best_k=5, print_res=True, save_classification=False):
     """classifies the test data wrt the given train data
 
     Args:
@@ -207,7 +207,7 @@ def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_tes
         labels_test (List of Integers): testing labels
         best_k (int, optional): number of nearest neighbors. Defaults to 5.
         print_res (bool, optional): Print results or not. Defaults to True.
-        explain (bool, optional): Print k nearest neighbors to explain decision. Defaults to False.
+        save_explain (bool, optional): Save the results of the classification. Defaults to False.
 
     Returns:
         float: mean auprc score
@@ -217,6 +217,11 @@ def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_tes
     number_of_channels = labvitals_list_train[0].iloc[:, 6:].shape[1]
     scores_auprc = []
     scores_auc = []
+
+    # delete old data if one wants to save new data
+    if save_classification:
+        delete_classification_data()
+
     for channel in trange(number_of_channels, desc="Classify each channel", leave=False):
         score_auprc, score_roc_auc, pred_labels, k_nearest_time_series, best_paths = knn(labvitals_list_train, 
                                                                                                   labvitals_list_test, 
@@ -225,9 +230,9 @@ def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_tes
         scores_auprc.append(score_auprc)
         scores_auc.append(score_roc_auc)
 
-        if explain:
-            plot_explain(k_nearest_time_series, labvitals_list_test, best_paths, channel)
-            
+        if save_classification:
+            save_classification_data(k_nearest_time_series, best_paths, channel)
+
     mean_score_auprc = np.mean(scores_auprc)
     mean_score_roc_auc = np.mean(scores_auc)
     if print_res:

@@ -126,6 +126,32 @@ def load_best_k(collection_name="best_result", db_name="mongo", url="mongodb://l
     return best_k[0]
 
 
+def save_classification_data(classification_data, best_paths, channel, collection_name="classification_data", db_name="mongo", url="mongodb://localhost:27017/"):
+    _, collection = connect_to_database(collection_name, db_name=db_name, url=url)
+    serialized_classification_data = Binary(pickle.dumps(classification_data, protocol=2))
+    best_paths = Binary(pickle.dumps(best_paths, protocol=2))
+    neighbor_dict = {"channel" : channel, "nearest neighbors" : serialized_classification_data, "best paths": best_paths}
+    collection.insert_one(neighbor_dict)
+
+
+def delete_classification_data(collection_name="classification_data", db_name="mongo", url="mongodb://localhost:27017/"):
+    db, collection = connect_to_database(collection_name, db_name=db_name, url=url)
+    db.drop(collection)
+
+
+def load_classification_data(collection_name="classification_data", db_name="mongo", url="mongodb://localhost:27017/"):
+    _, collection = connect_to_database(collection_name, db_name=db_name, url=url)
+    cursor = collection.find({})
+    channels = []
+    classification_data = []
+    best_paths = []
+    for data in cursor:
+        channels.append(data["channel"])
+        classification_data.append(pickle.loads(data["nearest neighbors"]))
+        best_paths.append(pickle.loads(data["best paths"]))
+    return channels, classification_data[0], best_paths[0]
+
+
 def connect_to_database(collection_name, db_name="mongo", url="mongodb://localhost:27017/"):
     """connects to certain collection in database
 

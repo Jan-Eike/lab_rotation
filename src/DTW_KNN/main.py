@@ -10,8 +10,8 @@ import click
 @click.option('--train_length', default=-1, help='Length of the train dataset. Use entire train set with -1 (default).')
 @click.option('--test_length', default=-1, help='Length of the test dataset. Use entire test set with -1 (default).')
 @click.option('--val_length', default=-1, help='Length of the validation dataset. Use entire validation set with -1 (default).')
-@click.option('--explain', default=False, help='Want to explain the results?')
-def main(use_saved_matrices=False, use_saved_k=False, train_length=-1, val_length=-1, test_length=-1, explain=False):
+@click.option('--save_classification', default=False, help='Want to save the classification results?')
+def main(use_saved_matrices=False, use_saved_k=False, train_length=-1, val_length=-1, test_length=-1, save_classification=False):
     """main method: Runs the entire clssification process."""
     train_length = int(train_length)
     test_length = int(test_length)
@@ -35,7 +35,8 @@ def main(use_saved_matrices=False, use_saved_k=False, train_length=-1, val_lengt
 
     #classify_precomputed(dtw_matrices_train, dtw_matrices_test, labels_train, labels_test, test_length, best_k=best_k)
 
-    classify(labvitals_time_series_list_train, labvitals_time_series_list_test, labels_train, labels_test, best_k=best_k, print_res=True, explain=explain)
+    classify(labvitals_time_series_list_train, labvitals_time_series_list_test, labels_train,
+             labels_test, best_k=best_k, print_res=True, save_classification=save_classification)
 
     end = time.time()
     print("Time: {}".format(end - start))
