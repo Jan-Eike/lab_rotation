@@ -127,6 +127,16 @@ def load_best_k(collection_name="best_result", db_name="mongo", url="mongodb://l
 
 
 def save_classification_data(classification_data, best_paths, channel, collection_name="classification_data", db_name="mongo", url="mongodb://localhost:27017/"):
+    """saves the classification da as binary string
+
+    Args:
+        classification_data (List): List of Lists of the k nearest neighbors for each test datapoint
+        best_paths (List): List of DTW Paths
+        channel (Int): Channel number
+        collection_name (str, optional): name of the collection. Defaults to "classification_data".
+        db_name (str, optional): Name of the database. Defaults to "mongo".
+        url (str, optional): url to the database. Defaults to "mongodb://localhost:27017/".
+    """
     _, collection = connect_to_database(collection_name, db_name=db_name, url=url)
     serialized_classification_data = Binary(pickle.dumps(classification_data, protocol=2))
     best_paths = Binary(pickle.dumps(best_paths, protocol=2))
@@ -135,11 +145,31 @@ def save_classification_data(classification_data, best_paths, channel, collectio
 
 
 def delete_classification_data(collection_name="classification_data", db_name="mongo", url="mongodb://localhost:27017/"):
+    """deletes the classification collection.
+       this should be done before starting to fill it up again
+       this is not done in the save method because
+       it will be called multiple times in a row
+
+    Args:
+        collection_name (str, optional): name of the collection. Defaults to "classification_data".
+        db_name (str, optional): Name of the database. Defaults to "mongo".
+        url (str, optional): url to the database. Defaults to "mongodb://localhost:27017/".
+    """
     db, collection = connect_to_database(collection_name, db_name=db_name, url=url)
     db.drop_collection(collection)
 
 
 def load_classification_data(collection_name="classification_data", db_name="mongo", url="mongodb://localhost:27017/"):
+    """loads the classification data and transforms it back to normal
+
+    Args:
+        collection_name (str, optional): name of the collection. Defaults to "classification_data".
+        db_name (str, optional): Name of the database. Defaults to "mongo".
+        url (str, optional): url to the database. Defaults to "mongodb://localhost:27017/".
+
+    Returns:
+        Lists: All the channel numbers as list, the classification results and the best paths
+    """
     _, collection = connect_to_database(collection_name, db_name=db_name, url=url)
     cursor = collection.find({})
     channels = []
@@ -153,12 +183,31 @@ def load_classification_data(collection_name="classification_data", db_name="mon
 
 
 def save_current_test_data(test_data, collection_name="current_test_data", db_name="mongo", url="mongodb://localhost:27017/"):
+    """saves the currently used test data as binary string. This will 
+       be used when we don't use the entire test dataset
+
+    Args:
+        test_data (List of DataFrames): curent test data as described above
+        collection_name (str, optional): name of the collection. Defaults to "current_test_data".
+        db_name (str, optional): Name of the database. Defaults to "mongo".
+        url (str, optional): url to the database. Defaults to "mongodb://localhost:27017/".
+    """
     db, collection = connect_to_database(collection_name, db_name=db_name, url=url)
     db.drop_collection(collection)
     collection.insert_one({"current test data" : Binary(pickle.dumps(test_data, protocol=2))})
 
 
 def load_current_test_data(collection_name="current_test_data", db_name="mongo", url="mongodb://localhost:27017/"):
+    """loads the current test data and converts it back to normal
+
+    Args:
+        collection_name (str, optional): name of the collection. Defaults to "current_test_data".
+        db_name (str, optional): Name of the database. Defaults to "mongo".
+        url (str, optional): url to the database. Defaults to "mongodb://localhost:27017/".
+
+    Returns:
+        List of DataFrames: List of the current test DataFrames
+    """
     _, collection = connect_to_database(collection_name, db_name=db_name, url=url)
     cursor = collection.find({})
     test_data = []
