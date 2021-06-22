@@ -136,7 +136,7 @@ def save_classification_data(classification_data, best_paths, channel, collectio
 
 def delete_classification_data(collection_name="classification_data", db_name="mongo", url="mongodb://localhost:27017/"):
     db, collection = connect_to_database(collection_name, db_name=db_name, url=url)
-    db.drop(collection)
+    db.drop_collection(collection)
 
 
 def load_classification_data(collection_name="classification_data", db_name="mongo", url="mongodb://localhost:27017/"):
@@ -150,6 +150,21 @@ def load_classification_data(collection_name="classification_data", db_name="mon
         classification_data.append(pickle.loads(data["nearest neighbors"]))
         best_paths.append(pickle.loads(data["best paths"]))
     return channels, classification_data[0], best_paths[0]
+
+
+def save_current_test_data(test_data, collection_name="current_test_data", db_name="mongo", url="mongodb://localhost:27017/"):
+    db, collection = connect_to_database(collection_name, db_name=db_name, url=url)
+    db.drop_collection(collection)
+    collection.insert_one({"current test data" : Binary(pickle.dumps(test_data, protocol=2))})
+
+
+def load_current_test_data(collection_name="current_test_data", db_name="mongo", url="mongodb://localhost:27017/"):
+    _, collection = connect_to_database(collection_name, db_name=db_name, url=url)
+    cursor = collection.find({})
+    test_data = []
+    for data in cursor:
+        test_data.append(pickle.loads(data["current test data"]))
+    return test_data[0]
 
 
 def connect_to_database(collection_name, db_name="mongo", url="mongodb://localhost:27017/"):

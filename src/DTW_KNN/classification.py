@@ -7,7 +7,7 @@ from tqdm import tqdm, trange
 from sklearn.metrics import average_precision_score, roc_auc_score
 from dtaidistance import dtw
 from dtaidistance import dtw_visualisation as dtwvis
-from save_data import save_distance_matrices, save_classification_data, load_classification_data, delete_classification_data
+from save_data import save_distance_matrices, save_classification_data, load_classification_data, delete_classification_data, save_current_test_data
 
 
 def index_time_series_list(time_series_list, index):
@@ -232,6 +232,9 @@ def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_tes
 
         if save_classification:
             save_classification_data(k_nearest_time_series, best_paths, channel)
+
+    if save_classification:
+        save_current_test_data(labvitals_list_test)
 
     mean_score_auprc = np.mean(scores_auprc)
     mean_score_roc_auc = np.mean(scores_auc)
