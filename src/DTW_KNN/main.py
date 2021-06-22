@@ -17,7 +17,7 @@ def main(use_saved_matrices=False, use_saved_k=False, train_length=-1, val_lengt
     test_length = int(test_length)
     val_length = int(val_length)
 
-    # list containing values for the hyperparameter k
+    # list containing values for the hyperparameter ks
     # these values are going to be used for finding the best k
     k_list = [1, 3, 5, 7, 9, 11, 13, 15, 17]
 
@@ -29,7 +29,6 @@ def main(use_saved_matrices=False, use_saved_k=False, train_length=-1, val_lengt
     labvitals_time_series_list_val, labels_val = data[2], data[5]
 
     best_k = get_best_k(use_saved_k, labvitals_time_series_list_val, labels_val, k_list)
-
     #dtw_matrices_train, dtw_matrices_test = get_distance_matrices(use_saved_matrices, labvitals_time_series_list_train,
     #                                                              labvitals_time_series_list_test, train_length, test_length)
 

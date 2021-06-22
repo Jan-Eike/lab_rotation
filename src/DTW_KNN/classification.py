@@ -286,10 +286,18 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
     score_auprc = average_precision_score(labels_test, pred_labels)
     score_roc_auc = roc_auc_score(labels_test, pred_labels)
 
+    # RETURN
     # k_nearest_time_series:
     # [[nn_1, ..., nn_k], ..., [nn_1, ..., nn_k]]
     # one list for each test point 
-    return score_auprc, score_roc_auc, np.array(pred_labels), k_nearest_time_series, best_paths[0]
+
+    # best_paths:
+    # [ [[(), ..., ()], ..., [(), ..., ()]], ..., [[(), ..., ()], ..., [(), ..., ()]] ]
+    # one list for each test point
+    # one 1. inner list for each channel
+    # one 2. inner list for each k nearest neighbor
+    # each 2. inner list is a DTW path
+    return score_auprc, score_roc_auc, np.array(pred_labels), k_nearest_time_series, best_paths
 
 
 def plot_time_series(k_nearest_time_series, number_of_channels):
