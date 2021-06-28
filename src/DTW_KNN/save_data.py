@@ -172,19 +172,20 @@ def load_classification_data(collection_name="classification_data", db_name="mon
         url (str, optional): url to the database. Defaults to "mongodb://localhost:27017/".
 
     Returns:
-        Lists: All the channel numbers as list, the classification results, the best distances and the best paths
+        Lists: All the classification results, the best paths, the best distances, all distances per test point
     """
     _, collection = connect_to_database(collection_name, db_name=db_name, url=url)
     cursor = collection.find({})
-    channels = []
     classification_data = []
     best_distances = []
     best_paths = []
+    distances_per_test_point = []
     for data in cursor:
         classification_data.append(pickle.loads(data["nearest neighbors"]))
         best_paths.append(pickle.loads(data["best paths"]))
         best_distances.append(pickle.loads(data["best distances"]))
-    return classification_data[0], best_distances, best_paths[0]
+        distances_per_test_point.append(pickle.loads(data["distances per test point"]))
+    return classification_data[0], best_paths[0][0], best_distances[0], distances_per_test_point
 
 
 def save_current_test_data(test_data, collection_name="current_test_data", db_name="mongo", url="mongodb://localhost:27017/"):

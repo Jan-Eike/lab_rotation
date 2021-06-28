@@ -258,6 +258,7 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
     k_nearest_time_series = []
     best_paths = []
     best_distances = []
+    best_distances_per_test_point = []
     # iloc[:, 6:] just cuts off the first 6 columns, since we don't need them for calculating anything
     number_of_channels = time_series_list_train[0].iloc[:, 6:].shape[1]
     for time_series_test in tqdm(time_series_list_test, desc="Calculating DTW distance from test data to train data", leave=False):
@@ -269,24 +270,24 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
             for channel in range(number_of_channels):
                 # distance from one test point to all training points
                 best_path, d = metrics.dtw_path(np.array(time_series_test.iloc[:, 6:].iloc[:, [channel]]), np.array(time_series_train.iloc[:, 6:].iloc[:, [channel]]))
-                #best_path = dtw.best_path(paths)
                 distances_per_train_point.append(d)
                 best_paths_per_train_point.append(best_path)
 
-            best_paths_per_test_point.append(best_path)
+            best_paths_per_test_point.append(best_paths_per_train_point)
             distances_per_test_point.append(distances_per_train_point)
 
         distances_per_test_point = np.array(distances_per_test_point)
-        distances = np.mean(distances_per_test_point, axis=0)
+        distances = np.mean(distances_per_test_point, axis=1)
 
         nearest_neighbor_id = np.argsort(distances)[:k]
 
-        best_distances.append(sorted(distances))
+        best_distances.append(index_time_series_list(distances, nearest_neighbor_id))
+        best_distances_per_test_point.append(index_time_series_list(distances_per_test_point, nearest_neighbor_id))
         k_nearest_time_series.append(index_time_series_list(time_series_list_train, nearest_neighbor_id))
         best_paths.append(index_time_series_list(best_paths_per_test_point, nearest_neighbor_id))
 
         if save_classification:
-            save_classification_data(k_nearest_time_series, best_paths, best_distances, distances_per_test_point)
+            save_classification_data(k_nearest_time_series, best_paths, best_distances, best_distances_per_test_point)
 
         pred_label = labels_train[nearest_neighbor_id]
         # finds most frequently occurring label 
