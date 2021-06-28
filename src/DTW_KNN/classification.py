@@ -216,28 +216,27 @@ def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_tes
     # iloc[:, 6:] just cuts off the first 6 columns, since we don't need them for calculating anything
     number_of_channels = labvitals_list_train[0].iloc[:, 6:].shape[1]
     scores_auprc = []
-    scores_auc = []
-
+    scores_roc_auc = []
     # delete old data if one wants to save new data
     if save_classification:
         delete_classification_data()
 
     for channel in trange(number_of_channels, desc="Classify each channel", leave=False):
-        score_auprc, score_roc_auc, pred_labels, k_nearest_time_series, best_paths = knn(labvitals_list_train, 
+        score_auprc, score_roc_auc, pred_labels, k_nearest_time_series, best_paths, best_distances = knn(labvitals_list_train, 
                                                                                                   labvitals_list_test, 
                                                                                                   labels_train, labels_test, 
                                                                                                   channel, k=best_k)
         scores_auprc.append(score_auprc)
-        scores_auc.append(score_roc_auc)
+        scores_roc_auc.append(score_roc_auc)
 
         if save_classification:
-            save_classification_data(k_nearest_time_series, best_paths, channel)
+            save_classification_data(k_nearest_time_series, best_paths, best_distances, channel)
 
     if save_classification:
         save_current_test_data(labvitals_list_test)
 
     mean_score_auprc = np.mean(scores_auprc)
-    mean_score_roc_auc = np.mean(scores_auc)
+    mean_score_roc_auc = np.mean(scores_roc_auc)
     if print_res:
         print("Mean score_auprc:   {}".format(mean_score_auprc))
         print("Mean score_roc_auc: {}".format(mean_score_roc_auc))
@@ -265,17 +264,19 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
     pred_labels = []
     k_nearest_time_series = []
     best_paths = []
+    best_distances = []
     for time_series_test in tqdm(time_series_list_test, desc="Calculating DTW distance from test data to train data", leave=False):
         distances = []
         best_paths_per_test = []
         for time_series_train in tqdm(time_series_list_train, desc="Calculating DTW distance for one test point", leave=False):
             # distance from one test point to all training points
-            best_path, d = metrics.dtw_path(np.array(time_series_test.iloc[:, 6:].iloc[:, channel]), np.array(time_series_train.iloc[:, 6:].iloc[:, channel]))
+            best_path, d = metrics.dtw_path(np.array(time_series_test.iloc[:, 6:].iloc[:, [channel]]), np.array(time_series_train.iloc[:, 6:].iloc[:, [channel]]))
             #best_path = dtw.best_path(paths)
             best_paths_per_test.append(best_path)
             distances.append(d)
 
         nearest_neighbor_id = np.argsort(distances)[:k]
+        best_distances.append(sorted(distances))
         k_nearest_time_series.append(index_time_series_list(time_series_list_train, nearest_neighbor_id))
         best_paths.append(index_time_series_list(best_paths_per_test, nearest_neighbor_id))
         pred_label = labels_train[nearest_neighbor_id]
@@ -297,7 +298,10 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
     # one 1. inner list for each channel
     # one 2. inner list for each k nearest neighbor
     # each 2. inner list is a DTW path
-    return score_auprc, score_roc_auc, np.array(pred_labels), k_nearest_time_series, best_paths
+
+    # best_distances:
+    # [[], ..., []]
+    return score_auprc, score_roc_auc, np.array(pred_labels), k_nearest_time_series, best_paths, best_distances
 
 
 def plot_time_series(k_nearest_time_series, number_of_channels):
