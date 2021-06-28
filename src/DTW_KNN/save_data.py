@@ -126,7 +126,7 @@ def load_best_k(collection_name="best_result", db_name="mongo", url="mongodb://l
     return best_k[0]
 
 
-def save_classification_data(classification_data, best_paths, best_distances, channel, collection_name="classification_data", db_name="mongo", url="mongodb://localhost:27017/"):
+def save_classification_data(classification_data, best_paths, best_distances, distances_per_test_point, collection_name="classification_data", db_name="mongo", url="mongodb://localhost:27017/"):
     """saves the classification da as binary string
 
     Args:
@@ -142,7 +142,9 @@ def save_classification_data(classification_data, best_paths, best_distances, ch
     serialized_classification_data = Binary(pickle.dumps(classification_data, protocol=2))
     best_paths = Binary(pickle.dumps(best_paths, protocol=2))
     best_distances = Binary(pickle.dumps(best_distances, protocol=2))
-    neighbor_dict = {"channel" : channel, "nearest neighbors" : serialized_classification_data, "best paths": best_paths, "best distances" : best_distances}
+    distances_per_test_point = Binary(pickle.dumps(distances_per_test_point, protocol=2))
+    neighbor_dict = {"nearest neighbors" : serialized_classification_data, "best paths": best_paths,
+                     "best distances" : best_distances, "distances per test point": distances_per_test_point}
     collection.insert_one(neighbor_dict)
 
 
@@ -179,11 +181,10 @@ def load_classification_data(collection_name="classification_data", db_name="mon
     best_distances = []
     best_paths = []
     for data in cursor:
-        channels.append(data["channel"])
         classification_data.append(pickle.loads(data["nearest neighbors"]))
         best_paths.append(pickle.loads(data["best paths"]))
         best_distances.append(pickle.loads(data["best distances"]))
-    return channels, classification_data[0], best_distances, best_paths[0]
+    return classification_data[0], best_distances, best_paths[0]
 
 
 def save_current_test_data(test_data, collection_name="current_test_data", db_name="mongo", url="mongodb://localhost:27017/"):

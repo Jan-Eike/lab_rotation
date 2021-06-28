@@ -219,15 +219,11 @@ def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_tes
     if save_classification:
         delete_classification_data()
 
-    score_auprc, score_roc_auc, pred_labels, k_nearest_time_series, best_paths, best_distances = knn(labvitals_list_train, 
-                                                                                                labvitals_list_test, 
-                                                                                                labels_train, labels_test, 
-                                                                                                k=best_k)
+    score_auprc, score_roc_auc = knn(labvitals_list_train, labvitals_list_test, 
+                                    labels_train, labels_test, k=best_k, save_classification=save_classification)
+
     scores_auprc.append(score_auprc)
     scores_roc_auc.append(score_roc_auc)
-
-    if save_classification:
-        save_classification_data(k_nearest_time_series, best_paths, best_distances)
 
     if save_classification:
         save_current_test_data(labvitals_list_test)
@@ -240,7 +236,7 @@ def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_tes
     return mean_score_auprc, mean_score_roc_auc
 
 
-def knn(time_series_list_train, time_series_list_test, labels_train, labels_test, k=5):
+def knn(time_series_list_train, time_series_list_test, labels_train, labels_test, k=5, save_classification=False):
     """perfomrs K nearest neighbors for the given train and test set.
 
     Args:
@@ -265,26 +261,33 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
     # iloc[:, 6:] just cuts off the first 6 columns, since we don't need them for calculating anything
     number_of_channels = time_series_list_train[0].iloc[:, 6:].shape[1]
     for time_series_test in tqdm(time_series_list_test, desc="Calculating DTW distance from test data to train data", leave=False):
-        distances_for_test_point = []
-        best_paths_per_test = []
+        distances_per_test_point = []
+        best_paths_per_test_point = []
         for time_series_train in tqdm(time_series_list_train, desc="Calculating DTW distance for one test point", leave=False):
-            distances_for_train_point = []
+            distances_per_train_point = []
+            best_paths_per_train_point = []
             for channel in range(number_of_channels):
                 # distance from one test point to all training points
                 best_path, d = metrics.dtw_path(np.array(time_series_test.iloc[:, 6:].iloc[:, [channel]]), np.array(time_series_train.iloc[:, 6:].iloc[:, [channel]]))
                 #best_path = dtw.best_path(paths)
-                best_paths_per_test.append(best_path)
-                distances_for_train_point.append(d)
+                distances_per_train_point.append(d)
+                best_paths_per_train_point.append(best_path)
 
-            distances_for_test_point.append(distances_for_train_point)
+            best_paths_per_test_point.append(best_path)
+            distances_per_test_point.append(distances_per_train_point)
 
-        distances_for_test_point = np.array(distances_for_test_point)
-        distances = np.mean(distances_for_test_point, axis=0)
+        distances_per_test_point = np.array(distances_per_test_point)
+        distances = np.mean(distances_per_test_point, axis=0)
 
         nearest_neighbor_id = np.argsort(distances)[:k]
+
         best_distances.append(sorted(distances))
         k_nearest_time_series.append(index_time_series_list(time_series_list_train, nearest_neighbor_id))
-        best_paths.append(index_time_series_list(best_paths_per_test, nearest_neighbor_id))
+        best_paths.append(index_time_series_list(best_paths_per_test_point, nearest_neighbor_id))
+
+        if save_classification:
+            save_classification_data(k_nearest_time_series, best_paths, best_distances, distances_per_test_point)
+
         pred_label = labels_train[nearest_neighbor_id]
         # finds most frequently occurring label 
         pred_label = np.bincount(pred_label).argmax()
@@ -293,7 +296,6 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
     score_auprc = average_precision_score(labels_test, pred_labels)
     score_roc_auc = roc_auc_score(labels_test, pred_labels)
 
-    # RETURN
     # k_nearest_time_series:
     # [[nn_1, ..., nn_k], ..., [nn_1, ..., nn_k]]
     # one list for each test point 
@@ -307,7 +309,7 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
 
     # best_distances:
     # [[], ..., []]
-    return score_auprc, score_roc_auc, np.array(pred_labels), k_nearest_time_series, best_paths, best_distances
+    return score_auprc, score_roc_auc
 
 
 def plot_time_series(k_nearest_time_series, number_of_channels):

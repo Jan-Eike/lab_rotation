@@ -8,9 +8,10 @@ from tslearn import metrics
 def main():
     """Main method for explainabilty.
     """
-    channel, k_nearest_time_series, best_distances, best_paths  = load_classification_data()
+    k_nearest_time_series, best_distances, best_paths  = load_classification_data()
     #print(k_nearest_time_series[0][0])
     print(len(best_paths))
+    print(best_paths)
     labvitals_list_test = load_current_test_data()
     #print(labvitals_list_test[0])
     #plot_explain(k_nearest_time_series, labvitals_list_test, best_paths, channel[1], 0)
@@ -18,7 +19,7 @@ def main():
     print(np.array(labvitals_list_test[0].iloc[:, 6:].iloc[:, [0]], dtype='float64').reshape(-1,))
     #print(channel)
     print(np.mean(distance_between_test_and_train_point(best_distances, 0, 0)))
-    plot_all_channels(k_nearest_time_series, labvitals_list_test, best_paths, channel)
+    #plot_all_channels(k_nearest_time_series, labvitals_list_test, best_paths)
 
 
 def plot_explain(k_nearest_time_series, labvitals_list_test, best_paths, channel, distance):
@@ -47,8 +48,9 @@ def plot_explain(k_nearest_time_series, labvitals_list_test, best_paths, channel
 
 
 def distance_between_test_and_train_point(best_distances, test_point, nearest_neighbor):
-    number_of_channels = len(best_distances)
+    number_of_channels = len(best_distances[0])
     distance = np.zeros((number_of_channels,))
+    print(best_distances[0])
     for channel, dist in enumerate(best_distances):
         distance[channel] = dist[test_point][nearest_neighbor]
     print(distance)
