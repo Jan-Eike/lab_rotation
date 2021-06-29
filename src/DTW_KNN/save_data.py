@@ -185,7 +185,9 @@ def load_classification_data(collection_name="classification_data", db_name="mon
         best_paths.append(pickle.loads(data["best paths"]))
         best_distances.append(pickle.loads(data["best distances"]))
         distances_per_test_point.append(pickle.loads(data["distances per test point"]))
-    return classification_data, best_paths, best_distances, distances_per_test_point[0]
+    # last entry, because the elements get added to a list but the save operation is called after every 
+    # append, so only after the last append everything is saved.
+    return classification_data[-1], best_paths[-1], best_distances[-1], distances_per_test_point[-1]
 
 
 def save_current_test_data(test_data, collection_name="current_test_data", db_name="mongo", url="mongodb://localhost:27017/"):

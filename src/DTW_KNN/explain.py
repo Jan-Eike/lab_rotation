@@ -29,7 +29,7 @@ def plot_explain(nearest_neighbor, labvitals_list_test, best_paths, nn, test_poi
         #print(nearest_neighbor.iloc[:, 6:].iloc[:, [channel]])
         #print(labvitals_list_test[test_point].iloc[:, 6:].iloc[:, [channel]])
         if plot_dtw:
-            fig, ax = dtwvis.plot_warping(time_series_2, time_series_1, best_paths[-1][test_point][nn][channel])
+            fig, ax = dtwvis.plot_warping(time_series_2, time_series_1, best_paths[test_point][nn][channel])
             fig.set_size_inches(10, 5)
             fig.subplots_adjust(hspace=0.2)
             fig.suptitle(labvitals_list_test[test_point].iloc[:, 6:].iloc[:, [channel]].columns[0], y=1)
@@ -39,10 +39,14 @@ def plot_explain(nearest_neighbor, labvitals_list_test, best_paths, nn, test_poi
 
 
 def plot_all_channels(k_nearest_time_series, labvitals_list_test, best_paths, distances_per_test_point, best_distances):
-    test_point = 5
-    for k, nearest_neighbor in enumerate(k_nearest_time_series[-1][test_point]):
-        plot_explain(nearest_neighbor, labvitals_list_test, best_paths, k, test_point, distances_per_test_point)
-        print(best_distances[test_point][0][k])
+    test_point = 3
+    test_points = [i for i in range(12)]
+    for test_point in test_points:
+        print("Test point {}:".format(test_point))
+        for k, nearest_neighbor in enumerate(k_nearest_time_series[test_point]):
+            plot_explain(nearest_neighbor, labvitals_list_test, best_paths, k, test_point, distances_per_test_point)
+            print(best_distances[test_point][k])
+        print()
 
 
 if __name__ == "__main__":
