@@ -1,4 +1,4 @@
-from save_data import load_classification_data, load_current_test_data
+from save_data import load_classification_data, load_current_test_data, load_nn_with_false_label
 import numpy as np
 import matplotlib.pyplot as plt
 from dtaidistance import dtw_visualisation as dtwvis
@@ -10,6 +10,8 @@ def main():
     """
     k_nearest_time_series, best_paths, best_distances, distances_per_test_point  = load_classification_data()
     labvitals_list_test = load_current_test_data()
+    nn_with_false_label = load_nn_with_false_label()
+    print(nn_with_false_label)
     plot_all_channels(k_nearest_time_series, labvitals_list_test, best_paths, best_distances)
 
 

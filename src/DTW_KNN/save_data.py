@@ -148,7 +148,7 @@ def save_classification_data(classification_data, best_paths, best_distances, di
     collection.insert_one(neighbor_dict)
 
 
-def delete_classification_data(collection_name="classification_data", db_name="mongo", url="mongodb://localhost:27017/"):
+def delete_classification_data(collection_name="classification_data", collection_name2="nn with false label", db_name="mongo", url="mongodb://localhost:27017/"):
     """deletes the classification collection.
        this should be done before starting to fill it up again
        this is not done in the save method because
@@ -156,11 +156,14 @@ def delete_classification_data(collection_name="classification_data", db_name="m
 
     Args:
         collection_name (str, optional): name of the collection. Defaults to "classification_data".
+        collection_name2 (str, optional): name of the  second collection. Defaults to "nn with false label".
         db_name (str, optional): Name of the database. Defaults to "mongo".
         url (str, optional): url to the database. Defaults to "mongodb://localhost:27017/".
     """
     db, collection = connect_to_database(collection_name, db_name=db_name, url=url)
     db.drop_collection(collection)
+    db2, collection2 = connect_to_database(collection_name2)
+    db2.drop_collection(collection2)
 
 
 def load_classification_data(collection_name="classification_data", db_name="mongo", url="mongodb://localhost:27017/"):
@@ -222,6 +225,38 @@ def load_current_test_data(collection_name="current_test_data", db_name="mongo",
     for data in cursor:
         test_data.append(pickle.loads(data["current test data"]))
     return test_data[0]
+
+
+def save_nn_with_false_label(nn_with_false_label, collection_name="nn with false label", db_name="mongo", url="mongodb://localhost:27017/"):
+    """saves the nearest neighbor with a different label as the test point
+
+    Args:
+        nn_with_false_label (DataFrame): teh nearest neighbor DataFrame
+        collection_name (str, optional): name of the collection. Defaults to "nn with false label".
+        db_name (str, optional): Name of the database. Defaults to "mongo".
+        url (str, optional): url to the database. Defaults to "mongodb://localhost:27017/".
+    """
+    db, collection = connect_to_database(collection_name)
+    collection.insert_one({"nn" : Binary(pickle.dumps(nn_with_false_label))})
+
+
+def load_nn_with_false_label(collection_name="nn with false label", db_name="mongo", url="mongodb://localhost:27017/"):
+    """loads the nearest neighbor with a different label as the test point
+
+    Args:
+        collection_name (str, optional): name of the collection. Defaults to "nn with false label".
+        db_name (str, optional): Name of the database. Defaults to "mongo".
+        url (str, optional): url to the database. Defaults to "mongodb://localhost:27017/".
+
+    Returns:
+        DataFrame: the nearest neighbor with a different label as the test point
+    """
+    _, collection = connect_to_database(collection_name)
+    cursor = collection.find({})
+    nn = []
+    for data in cursor:
+        nn.append(pickle.loads(data["nn"]))
+    return nn
 
 
 def connect_to_database(collection_name, db_name="mongo", url="mongodb://localhost:27017/"):
