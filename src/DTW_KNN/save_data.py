@@ -185,7 +185,7 @@ def load_classification_data(collection_name="classification_data", db_name="mon
         best_paths.append(pickle.loads(data["best paths"]))
         best_distances.append(pickle.loads(data["best distances"]))
         distances_per_test_point.append(pickle.loads(data["distances per test point"]))
-    return classification_data[0], best_paths[0][0], best_distances[0], distances_per_test_point
+    return classification_data, best_paths, best_distances, distances_per_test_point[0]
 
 
 def save_current_test_data(test_data, collection_name="current_test_data", db_name="mongo", url="mongodb://localhost:27017/"):

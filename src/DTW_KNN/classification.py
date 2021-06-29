@@ -287,6 +287,7 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
         best_paths.append(index_time_series_list(best_paths_per_test_point, nearest_neighbor_id))
 
         if save_classification:
+            print(len(best_paths[0]))
             save_classification_data(k_nearest_time_series, best_paths, best_distances, best_distances_per_test_point)
 
         pred_label = labels_train[nearest_neighbor_id]
