@@ -14,6 +14,15 @@ def main():
 
 
 def plot_explain(nearest_neighbor, labvitals_list_test, best_paths, nn, test_point):
+    """plots the anligned dynamic time warping between each channel of two time series.
+
+    Args:
+        nearest_neighbor (DataFrame): the nearest neighbor DataFrame
+        labvitals_list_test (List of DataFrames): List of the test DataFrames
+        best_paths (List): List of the best dtw paths for each test point
+        nn (int): number of the nearest neighbor
+        test_point (int): number of the test point
+    """
     number_of_channels = labvitals_list_test[test_point].iloc[:, 6:].shape[1]
     plot_dtw = True
     for channel in range(number_of_channels):
@@ -39,6 +48,15 @@ def plot_explain(nearest_neighbor, labvitals_list_test, best_paths, nn, test_poi
 
 
 def plot_all_channels(k_nearest_time_series, labvitals_list_test, best_paths, best_distances):
+    """calls plot_explain for each test point in the test_point list
+       and prints out the best distance from each test point to its k nearest neighbors.
+
+    Args:
+        k_nearest_time_series (List): List of the DataFrames of the k nearest neighbors
+        labvitals_list_test (List of DataFrames): List of the test DataFrames
+        best_paths (List): List of the best dtw paths for each test point
+        best_distances (List): List of the smallest distances for each Test point
+    """
     test_points = [5]
     for test_point in test_points:
         print("Test point {}:".format(test_point))

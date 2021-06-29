@@ -244,15 +244,12 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
         time_series_list_test (List of time Series): List of time series for testing
         labels_train (List of Integers): training labels
         labels_test (List of Integers): testing labels
-        channel (Integer): current channel of the time series
         k (int, optional): number of nearest neighbors. Defaults to 5.
+        save_classification (bool, optional): Save the results of the classification. Defaults to False.
 
     Returns:
         float: auprc score
         float: roc auc score
-        List of Integers: List of predicted labels
-        List of Lists of DataFrames: List of Lists of the k nearest neighbors for each test datapoint
-        List of List of Tuples: List of DTW Paths
     """
     pred_labels = []
     k_nearest_time_series = []
