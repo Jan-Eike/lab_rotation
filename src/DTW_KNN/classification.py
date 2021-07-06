@@ -274,7 +274,7 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
     # iloc[:, 6:] just cuts off the first 6 columns, since we don't need them for calculating anything
     number_of_channels = time_series_list_train[0].iloc[:, 6:].shape[1]
 
-    num_cores = min(20, multiprocessing.cpu_count() - 2)
+    num_cores = multiprocessing.cpu_count() // 2
     parameters = (pred_labels, k_nearest_time_series, number_of_channels,
                   save_classification, k, labels_train, time_series_list_train)
     inputs = tqdm(time_series_list_test, position=2, desc="Claculating DTW distance for entire test data", leave=False)
