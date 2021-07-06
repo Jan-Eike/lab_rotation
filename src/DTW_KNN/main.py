@@ -58,7 +58,7 @@ def get_best_k(use_saved_k, labvitals_time_series_list_val, labels_val, k_list):
         best_k = load_best_k()
     else:
         best_k = find_best_k(labvitals_time_series_list_val, labels_val, k_list)
-    best_k = 5
+    best_k = 1
     print("best k : {}".format(best_k))
     return best_k
 

@@ -1,13 +1,21 @@
+from inspect import Parameter
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+import random
+import multiprocessing
+from joblib import Parallel, delayed
 from sklearn.neighbors import KNeighborsClassifier
 from tqdm import tqdm, trange
 from sklearn.metrics import average_precision_score, roc_auc_score
 from dtaidistance import dtw
 from tslearn import metrics
-from save_data import save_distance_matrices, save_classification_data, load_classification_data, delete_classification_data, save_current_test_data
+from save_data import (save_distance_matrices,
+                       save_classification_data,
+                       delete_classification_data, 
+                       save_current_test_data, 
+                       save_nn_with_false_label)
 
 
 def index_time_series_list(time_series_list, index):
@@ -44,9 +52,19 @@ def load_data(train_length, test_length, val_length):
     labvitals_train = pd.read_csv("C:\\Users\\Jan\\Desktop\\project\\MGP-AttTCN\\data\\train\\full_labvitals.csv")
     labvitals_test = pd.read_csv("C:\\Users\\Jan\\Desktop\\project\\MGP-AttTCN\\data\\test\\full_labvitals.csv")
     labvitals_val = pd.read_csv("C:\\Users\\Jan\\Desktop\\project\\MGP-AttTCN\\data\\val\\full_labvitals.csv")
-    labvitals_time_series_list_train = get_time_series(labvitals_train, name="train")[:train_length]
-    labvitals_time_series_list_test = get_time_series(labvitals_test, name="test")[:test_length]
-    labvitals_time_series_list_val = get_time_series(labvitals_val, name="val")[:val_length]
+    random.seed(10)
+    if train_length != -1:
+        labvitals_time_series_list_train = random.sample(get_time_series(labvitals_train, name="train"), train_length)
+    else:
+        labvitals_time_series_list_train = get_time_series(labvitals_train, name="train")
+    if test_length != -1:
+        labvitals_time_series_list_test = random.sample(get_time_series(labvitals_test, name="test"), test_length)
+    else:
+        labvitals_time_series_list_test = get_time_series(labvitals_test, name="test")
+    if val_length != -1:
+        labvitals_time_series_list_val = random.sample(get_time_series(labvitals_val, name="val"), val_length)
+    else:
+        labvitals_time_series_list_val = get_time_series(labvitals_val, name="val")
     labels_train = get_labels(labvitals_time_series_list_train)
     labels_test = get_labels(labvitals_time_series_list_test)
     labels_val = get_labels(labvitals_time_series_list_val)
@@ -253,43 +271,16 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
     """
     pred_labels = []
     k_nearest_time_series = []
-    best_paths = []
-    best_distances = []
-    best_distances_per_test_point = []
     # iloc[:, 6:] just cuts off the first 6 columns, since we don't need them for calculating anything
     number_of_channels = time_series_list_train[0].iloc[:, 6:].shape[1]
-    for time_series_test in tqdm(time_series_list_test, desc="Calculating DTW distance from test data to train data", leave=False):
-        distances_per_test_point = []
-        best_paths_per_test_point = []
-        for time_series_train in tqdm(time_series_list_train, desc="Calculating DTW distance for one test point", leave=False):
-            distances_per_train_point = []
-            best_paths_per_train_point = []
-            for channel in range(number_of_channels):
-                # distance from one test point to all training points
-                best_path, d = metrics.dtw_path(np.array(time_series_test.iloc[:, 6:].iloc[:, [channel]]), np.array(time_series_train.iloc[:, 6:].iloc[:, [channel]]))
-                distances_per_train_point.append(d)
-                best_paths_per_train_point.append(best_path)
 
-            best_paths_per_test_point.append(best_paths_per_train_point)
-            distances_per_test_point.append(distances_per_train_point)
-
-        distances_per_test_point = np.array(distances_per_test_point)
-        distances = np.mean(distances_per_test_point, axis=1)
-
-        nearest_neighbor_id = np.argsort(distances)[:k]
-
-        best_distances.append(index_time_series_list(distances, nearest_neighbor_id))
-        best_distances_per_test_point.append(index_time_series_list(distances_per_test_point, nearest_neighbor_id))
-        k_nearest_time_series.append(index_time_series_list(time_series_list_train, nearest_neighbor_id))
-        best_paths.append(index_time_series_list(best_paths_per_test_point, nearest_neighbor_id))
-
-        if save_classification:
-            save_classification_data(k_nearest_time_series, best_paths, best_distances, best_distances_per_test_point)
-
-        pred_label = labels_train[nearest_neighbor_id]
-        # finds most frequently occurring label 
-        pred_label = np.bincount(pred_label).argmax()
-        pred_labels.append(pred_label)
+    num_cores = min(20, multiprocessing.cpu_count() - 2)
+    parameters = (pred_labels, k_nearest_time_series, number_of_channels,
+                  save_classification, k, labels_train, time_series_list_train)
+    inputs = tqdm(time_series_list_test, position=2, desc="Claculating DTW distance for entire test data", leave=False)
+    multiprocessing.freeze_support()
+    # parallel call for the method
+    pred_labels = Parallel(n_jobs=num_cores, backend="multiprocessing")(delayed(test_parallel)(input, parameters, i) for i, input in enumerate(inputs))
 
     score_auprc = average_precision_score(labels_test, pred_labels)
     score_roc_auc = roc_auc_score(labels_test, pred_labels)
@@ -308,6 +299,67 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
     # best_distances:
     # [[], ..., []]
     return score_auprc, score_roc_auc
+
+
+def test_parallel(time_series_test, parameters, i):
+    pred_labels, k_nearest_time_series = parameters[0:2]
+    number_of_channels, save_classification = parameters[2:4]
+    k, labels_train, time_series_list_train = parameters[4:7]
+    distances_per_test_point = []
+    best_paths_per_test_point = []
+    for time_series_train in tqdm(time_series_list_train, desc="Calculating DTW distance for one test point", leave=False):
+        distances_per_train_point = []
+        best_paths_per_train_point = []
+        for channel in range(number_of_channels):
+            # distance from one test point to all training points
+            best_path, d = metrics.dtw_path(np.array(time_series_test.iloc[:, 6:].iloc[:, [channel]]), np.array(time_series_train.iloc[:, 6:].iloc[:, [channel]]))
+            distances_per_train_point.append(d)
+            best_paths_per_train_point.append(best_path)
+
+        best_paths_per_test_point.append(best_paths_per_train_point)
+        distances_per_test_point.append(distances_per_train_point)
+
+    distances_per_test_point = np.array(distances_per_test_point)
+    distances = np.mean(distances_per_test_point, axis=1)
+
+    sorted_distances = np.argsort(distances)
+    nearest_neighbor_id = sorted_distances[:k]
+
+    if save_classification:
+        save_classification_data((index_time_series_list(time_series_list_train, nearest_neighbor_id), i),
+                                 (index_time_series_list(best_paths_per_test_point, nearest_neighbor_id), i), 
+                                 (index_time_series_list(distances, nearest_neighbor_id), i),
+                                 (index_time_series_list(distances_per_test_point, nearest_neighbor_id), i))
+
+    pred_label = labels_train[nearest_neighbor_id]
+    # finds most frequently occurring label 
+    pred_label = np.bincount(pred_label).argmax()
+    pred_labels.append(pred_label)
+
+    find_nn_with_false_label(sorted_distances, labels_train, pred_label, time_series_list_train, save_classification)
+
+    return pred_labels
+
+
+def find_nn_with_false_label(sorted_distances, labels_train, pred_label, time_series_list_train, save_classification):
+    """find the nearest neighbor that has a different label than the predicted one and
+       saves it if required. Method is useless if the result does not get saved.
+
+    Args:
+        sorted_distances (List): List of indices of sorted distances
+        labels_train (List): List of trianing labels
+        pred_label (List): List of predicted Lbales
+        time_series_list_train (List of time Series): List of time series for training
+        save_classification (bool, optional): Save the results of the classification. Defaults to False.
+    """
+    if save_classification:
+        i = 0
+        dist = sorted_distances[i]
+        while labels_train[dist] == pred_label:
+            i += 1
+            dist = sorted_distances[i]
+        nn_with_false_label = time_series_list_train[dist]
+        save_nn_with_false_label(nn_with_false_label)
 
 
 def plot_time_series(k_nearest_time_series, number_of_channels):
