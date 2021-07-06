@@ -190,7 +190,7 @@ def load_classification_data(collection_name="classification_data", db_name="mon
         distances_per_test_point.append(pickle.loads(data["distances per test point"]))
     # last entry, because the elements get added to a list but the save operation is called after every 
     # append, so only after the last append everything is saved.
-    return classification_data[-1], best_paths[-1], best_distances[-1], distances_per_test_point[-1]
+    return classification_data, best_paths, best_distances, distances_per_test_point
 
 
 def save_current_test_data(test_data, collection_name="current_test_data", db_name="mongo", url="mongodb://localhost:27017/"):
