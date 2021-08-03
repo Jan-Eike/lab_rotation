@@ -3,7 +3,7 @@ import pandas as pd
 from save_data import save_best_k, save_scores, save_temp_scores
 import numpy as np
 from sklearn.model_selection import KFold 
-from classification import calculate_distance_matrices, classify, index_time_series_list
+from classification import classify, index_time_series_list
 
 
 def find_best_k(labvitals_time_series_list_val, labels_val, k_list, save=True):

@@ -1,17 +1,17 @@
 import time
-from classification import load_data, calculate_distance_matrices, classify, classify_precomputed
+from classification import classify
 from find_hyperparameter import find_best_k
-from save_data import load_best_k, load_distance_matrices
+from load_data import load_best_k
+from data_loader import load_data
 import click
 
 @click.command()
-@click.option('--use_saved_matrices', default=False, help='Want to use saved distance matrices from earlier calls?')
 @click.option('--use_saved_k', default=False, help='Want to use saved best k from earlier calls?')
 @click.option('--train_length', default=-1, help='Length of the train dataset. Use entire train set with -1 (default).')
 @click.option('--test_length', default=-1, help='Length of the test dataset. Use entire test set with -1 (default).')
 @click.option('--val_length', default=-1, help='Length of the validation dataset. Use entire validation set with -1 (default).')
 @click.option('--save_classification', default=False, help='Want to save the classification results?')
-def main(use_saved_matrices=False, use_saved_k=False, train_length=-1, val_length=-1, test_length=-1, save_classification=False):
+def main(use_saved_k=False, train_length=-1, val_length=-1, test_length=-1, save_classification=False):
     """main method: Runs the entire clssification process."""
     train_length = int(train_length)
     test_length = int(test_length)
@@ -60,29 +60,6 @@ def get_best_k(use_saved_k, labvitals_time_series_list_val, labels_val, k_list):
         best_k = find_best_k(labvitals_time_series_list_val, labels_val, k_list)
     print("best k : {}".format(best_k))
     return best_k
-
-# not used anymore
-def get_distance_matrices(use_saved_train_matrices, labvitals_time_series_list_train, labvitals_time_series_list_test, train_length, test_length):
-    """gets the distance matrices, either from the database or from calculating it
-
-    Args:
-        use_saved_train_matrices (Boolean): should the train matrices be taken from the database?
-        labvitals_time_series_list_train (List of time Series): time series for training
-        labvitals_time_series_list_test (List of time Series): time Series for testing
-        train_length (int): lnegth of the training dataset (just for testing purposes)
-        test_length (int): length of the test dataset (just for testing purposes)
-
-    Returns:
-        [type]: [description]
-    """
-    if use_saved_train_matrices:
-        dtw_matrices_train = load_distance_matrices("dtw_matrices_train")
-        dtw_matrices_test = calculate_distance_matrices(labvitals_time_series_list_train, labvitals_time_series_list_test,
-                                                                    train_length, test_length, save=True, test_only=True)
-    else:
-        dtw_matrices_train, dtw_matrices_test = calculate_distance_matrices(labvitals_time_series_list_train, labvitals_time_series_list_test,
-                                                                            train_length, test_length, save=True)
-    return dtw_matrices_train, dtw_matrices_test
 
 
 if __name__ == "__main__":
