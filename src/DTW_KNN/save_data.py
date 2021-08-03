@@ -1,8 +1,8 @@
+import json
+import pickle
 import pandas as pd
 from pymongo import MongoClient
 from bson.binary import Binary
-import json
-import pickle
 
 
 def save_labvitals():
@@ -22,8 +22,8 @@ def mongoimport(coll_name, csv_path, db_name="mongo", url="mongodb://localhost:2
         db_name (str, optional): Name of the database. Defaults to "mongo".
         url (str, optional): url to the databse. Defaults to "mongodb://localhost:27017/".
     """
-    db, collection = connect_to_database(coll_name, db_name=db_name, url=url)
-    db.drop_collection(collection)
+    data_base, collection = connect_to_database(coll_name, db_name=db_name, url=url)
+    data_base.drop_collection(collection)
     data = pd.read_csv(csv_path)
     payload = json.loads(data.to_json(orient='records'))
     collection.insert_many(payload)
@@ -37,13 +37,13 @@ def save_scores(scores, db_name="mongo", url="mongodb://localhost:27017/"):
         db_name (str, optional): Name of the database. Defaults to "mongo".
         url (str, optional): url to the database. Defaults to "mongodb://localhost:27017/".
     """
-    db, collection_scores = connect_to_database("scores", db_name=db_name, url=url)
-    collection_temp_scores = db["temp_scores"]
-    db.drop_collection(collection_scores)
+    data_base, collection_scores = connect_to_database("scores", db_name=db_name, url=url)
+    collection_temp_scores = data_base["temp_scores"]
+    data_base.drop_collection(collection_scores)
     payload = json.loads(scores.to_json(orient='records'))
     collection_scores.insert_many(payload)
     # temp scores get deleted after all scores have been computed
-    db.drop_collection(collection_temp_scores)
+    data_base.drop_collection(collection_temp_scores)
 
 
 def save_temp_scores(score, db_name="mongo", url="mongodb://localhost:27017/"):
@@ -58,7 +58,8 @@ def save_temp_scores(score, db_name="mongo", url="mongodb://localhost:27017/"):
     collection.insert_one(score)
 
 
-def save_best_k(bets_result, collection_name="best_result", db_name="mongo", url="mongodb://localhost:27017/"):
+def save_best_k(bets_result, collection_name="best_result",
+                db_name="mongo", url="mongodb://localhost:27017/"):
     """saves the best k (k that achieved the highest score).
 
     Args:
@@ -67,12 +68,14 @@ def save_best_k(bets_result, collection_name="best_result", db_name="mongo", url
         db_name (str, optional): Name of the database. Defaults to "mongo".
         url (str, optional): url to the database. Defaults to "mongodb://localhost:27017/".
     """
-    db, collection = connect_to_database(collection_name, db_name=db_name, url=url)
-    db.drop_collection(collection)
+    data_base, collection = connect_to_database(collection_name, db_name=db_name, url=url)
+    data_base.drop_collection(collection)
     collection.insert_one({"best_result" : bets_result})
 
 
-def save_classification_data(classification_data, best_paths, best_distances, distances_per_test_point, collection_name="classification_data", db_name="mongo", url="mongodb://localhost:27017/"):
+def save_classification_data(classification_data, best_paths, best_distances,
+                             distances_per_test_point, collection_name="classification_data",
+                             db_name="mongo", url="mongodb://localhost:27017/"):
     """saves the classification da as binary string
 
     Args:
@@ -94,7 +97,9 @@ def save_classification_data(classification_data, best_paths, best_distances, di
     collection.insert_one(neighbor_dict)
 
 
-def delete_classification_data(collection_name="classification_data", collection_name2="nn with false label", db_name="mongo", url="mongodb://localhost:27017/"):
+def delete_classification_data(collection_name="classification_data",
+                               collection_name2="nn with false label",
+                               db_name="mongo", url="mongodb://localhost:27017/"):
     """deletes the classification collection.
        this should be done before starting to fill it up again
        this is not done in the save method because
@@ -106,14 +111,15 @@ def delete_classification_data(collection_name="classification_data", collection
         db_name (str, optional): Name of the database. Defaults to "mongo".
         url (str, optional): url to the database. Defaults to "mongodb://localhost:27017/".
     """
-    db, collection = connect_to_database(collection_name, db_name=db_name, url=url)
-    db.drop_collection(collection)
-    db2, collection2 = connect_to_database(collection_name2)
-    db2.drop_collection(collection2)
+    data_base, collection = connect_to_database(collection_name, db_name=db_name, url=url)
+    data_base.drop_collection(collection)
+    data_base2, collection2 = connect_to_database(collection_name2)
+    data_base2.drop_collection(collection2)
 
 
-def save_current_test_data(test_data, collection_name="current_test_data", db_name="mongo", url="mongodb://localhost:27017/"):
-    """saves the currently used test data as binary string. This will 
+def save_current_test_data(test_data, collection_name="current_test_data",
+                           db_name="mongo", url="mongodb://localhost:27017/"):
+    """saves the currently used test data as binary string. This will
        be used when we don't use the entire test dataset
 
     Args:
@@ -122,12 +128,12 @@ def save_current_test_data(test_data, collection_name="current_test_data", db_na
         db_name (str, optional): Name of the database. Defaults to "mongo".
         url (str, optional): url to the database. Defaults to "mongodb://localhost:27017/".
     """
-    db, collection = connect_to_database(collection_name, db_name=db_name, url=url)
-    db.drop_collection(collection)
+    data_base, collection = connect_to_database(collection_name, db_name=db_name, url=url)
+    data_base.drop_collection(collection)
     collection.insert_one({"current test data" : Binary(pickle.dumps(test_data, protocol=2))})
 
 
-def save_nn_with_false_label(nn_with_false_label, collection_name="nn with false label", db_name="mongo", url="mongodb://localhost:27017/"):
+def save_nn_with_false_label(nn_with_false_label, collection_name="nn with false label"):
     """saves the nearest neighbor with a different label as the test point
 
     Args:
@@ -136,7 +142,7 @@ def save_nn_with_false_label(nn_with_false_label, collection_name="nn with false
         db_name (str, optional): Name of the database. Defaults to "mongo".
         url (str, optional): url to the database. Defaults to "mongodb://localhost:27017/".
     """
-    db, collection = connect_to_database(collection_name)
+    _, collection = connect_to_database(collection_name)
     collection.insert_one({"nn" : Binary(pickle.dumps(nn_with_false_label))})
 
 
@@ -153,6 +159,6 @@ def connect_to_database(collection_name, db_name="mongo", url="mongodb://localho
         collection
     """
     client = MongoClient(url)
-    db = client[db_name]
-    collection = db[collection_name]
-    return db, collection
+    data_base = client[db_name]
+    collection = data_base[collection_name]
+    return data_base, collection

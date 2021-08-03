@@ -1,8 +1,8 @@
-from tqdm import tqdm
 import pandas as pd
-from save_data import save_best_k, save_scores, save_temp_scores
 import numpy as np
-from sklearn.model_selection import KFold 
+from tqdm import tqdm
+from sklearn.model_selection import KFold
+from save_data import save_best_k, save_scores, save_temp_scores
 from classification import classify, index_time_series_list
 
 
@@ -45,20 +45,21 @@ def cross_validate(labvitals_time_series_list_val, labels_val, k):
         k (integer): parameter k that gets cross validated
 
     Returns:
-            float: mean auprc_score of all scores achieved during cross validation  
+            float: mean auprc_score of all scores achieved during cross validation
         float: mean roc_auc_score of all scores achieved during cross validation
     """
     splits = 3
-    kf = KFold(n_splits=splits, random_state=42, shuffle=True)
+    k_fold = KFold(n_splits=splits, random_state=42, shuffle=True)
     scores_auprc = []
     scores_roc_auc = []
     # just defining a progress bar for manual control
     pbar = tqdm(total=splits, desc="Cross validating for k = {}".format(k), leave=False)
-    for train_index , test_index in kf.split(labvitals_time_series_list_val):
-        X_train = index_time_series_list(labvitals_time_series_list_val, train_index)
-        X_test = index_time_series_list(labvitals_time_series_list_val, test_index)
+    for train_index , test_index in k_fold.split(labvitals_time_series_list_val):
+        x_train = index_time_series_list(labvitals_time_series_list_val, train_index)
+        x_test = index_time_series_list(labvitals_time_series_list_val, test_index)
         y_train , y_test = labels_val[train_index] , labels_val[test_index]
-        mean_score_auprc, mean_score_roc_auc= classify(X_train, X_test, y_train, y_test, best_k=k, print_res=False)
+        mean_score_auprc, mean_score_roc_auc = classify(x_train, x_test, y_train,
+                                                        y_test, best_k=k, print_res=False)
         scores_auprc.append(mean_score_auprc)
         scores_roc_auc.append(mean_score_roc_auc)
         pbar.update(1)

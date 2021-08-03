@@ -1,9 +1,4 @@
 from classification import load_data
-import pickle
-import numpy as np
-from tslearn import metrics
-from dtaidistance import dtw_visualisation as dtwvis
-import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
     data = load_data(-1, -1, -1)

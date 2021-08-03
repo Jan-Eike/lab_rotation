@@ -1,13 +1,12 @@
-import numpy as np
-import matplotlib.pyplot as plt
 import multiprocessing
+import numpy as np
 from joblib import Parallel, delayed
 from tqdm import tqdm
 from sklearn.metrics import average_precision_score, roc_auc_score
 from tslearn import metrics
 from save_data import (save_classification_data,
-                       delete_classification_data, 
-                       save_current_test_data, 
+                       delete_classification_data,
+                       save_current_test_data,
                        save_nn_with_false_label)
 
 
@@ -27,7 +26,8 @@ def index_time_series_list(time_series_list, index):
     return new_time_series_list
 
 
-def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_test, best_k=5, print_res=True, save_classification=False):
+def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_test,
+             best_k=5, print_res=True, save_classification=False, num_cores=-1):
     """classifies the test data wrt the given train data
 
     Args:
@@ -37,7 +37,9 @@ def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_tes
         labels_test (List of Integers): testing labels
         best_k (int, optional): number of nearest neighbors. Defaults to 5.
         print_res (bool, optional): Print results or not. Defaults to True.
-        save_classification (bool, optional): Save the results of the classification. Defaults to False.
+        save_classification (bool, optional): Save the results of the classification.
+                                              Defaults to False.
+        sum_cores (int, optional): Number of cores for multitasking. Defaults to -1.
 
     Returns:
         float: mean auprc score
@@ -49,8 +51,9 @@ def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_tes
     if save_classification:
         delete_classification_data()
 
-    score_auprc, score_roc_auc = knn(labvitals_list_train, labvitals_list_test, 
-                                    labels_train, labels_test, k=best_k, save_classification=save_classification)
+    score_auprc, score_roc_auc = knn(labvitals_list_train, labvitals_list_test,
+                                    labels_train, labels_test, k=best_k,
+                                    save_classification=save_classification, num_cores=num_cores)
 
     scores_auprc.append(score_auprc)
     scores_roc_auc.append(score_roc_auc)
@@ -66,7 +69,8 @@ def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_tes
     return mean_score_auprc, mean_score_roc_auc
 
 
-def knn(time_series_list_train, time_series_list_test, labels_train, labels_test, k=5, save_classification=False):
+def knn(time_series_list_train, time_series_list_test, labels_train, labels_test,
+        k=5, save_classification=False, num_cores=-1):
     """perfomrs K nearest neighbors for the given train and test set.
 
     Args:
@@ -75,23 +79,32 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
         labels_train (List of Integers): training labels
         labels_test (List of Integers): testing labels
         k (int, optional): number of nearest neighbors. Defaults to 5.
-        save_classification (bool, optional): Save the results of the classification. Defaults to False.
+        save_classification (bool, optional): Save the results of the classification.
+                                              Defaults to False.
 
     Returns:
         float: auprc score
         float: roc auc score
     """
     pred_labels = []
-    k_nearest_time_series = []
-    # iloc[:, 6:] just cuts off the first 6 columns, since we don't need them for calculating anything
+    # iloc[:, 6:] just cuts off the first 6 columns,
+    # since we don't need them for calculating anything
     number_of_channels = time_series_list_train[0].iloc[:, 6:].shape[1]
 
-    num_cores = 2#multiprocessing.cpu_count() - 2
-    parameters = (pred_labels, k_nearest_time_series, number_of_channels,
-                  save_classification, k, labels_train, time_series_list_train)
-    inputs = tqdm(time_series_list_test, desc="Claculating DTW distance for entire test data", leave=False, position=2)
+    cpu_count = multiprocessing.cpu_count()
+    if num_cores == -1 or num_cores < 1 or num_cores > cpu_count:
+        num_cores = cpu_count - 2
+
+    parameters = (pred_labels, number_of_channels, save_classification,
+                  k, labels_train, time_series_list_train)
+
+    # create progress bar for time_series_list_test
+    inputs = tqdm(time_series_list_test, desc="Claculating DTW distance for entire test data",
+                 leave=False, position=2)
+
     # parallel call for the method
-    pred_labels = Parallel(n_jobs=num_cores)(delayed(test_parallel)(input, parameters, i) for i, input in enumerate(inputs))
+    pred_labels = Parallel(n_jobs=num_cores)(delayed(predict)(input, parameters, i)
+                                             for i, input in enumerate(inputs))
 
     score_auprc = average_precision_score(labels_test, pred_labels)
     score_roc_auc = roc_auc_score(labels_test, pred_labels)
@@ -99,14 +112,14 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
     ray.init(log_to_driver=False)
     for i, input in enumerate(inputs):
         pred_labels.append(test_parallel.remote(input, parameters, i))
-    
+
     score_auprc = average_precision_score(labels_test, pred_labels)
     score_roc_auc = roc_auc_score(labels_test, pred_labels)
     """
 
     # k_nearest_time_series:
     # [[nn_1, ..., nn_k], ..., [nn_1, ..., nn_k]]
-    # one list for each test point 
+    # one list for each test point
 
     # best_paths:
     # [ [[(), ..., ()], ..., [(), ..., ()]], ..., [[(), ..., ()], ..., [(), ..., ()]] ]
@@ -120,10 +133,27 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
     return score_auprc, score_roc_auc
 
 
-def test_parallel(time_series_test, parameters, i):
-    pred_labels, k_nearest_time_series = parameters[0:2]
-    number_of_channels, save_classification = parameters[2:4]
-    k, labels_train, time_series_list_train = parameters[4:7]
+def predict(time_series_test, parameters, i):
+    """predict the labels for the given test and train data
+
+    Args:
+        time_series_test (Pandas time Series): one test time series
+        parameters (Tuple): Tuple of the other parameters:
+                            pred_labels (List): List of the predicted labels
+                            number_of_channels (int): Number of channels (labvitals)
+                            save_classification (bool): Save classification data or not
+                            k (int): k for k nearest neighbors
+                            labels_train (List): List of training labels
+                            time_series_list_train (List): List of training time series
+        i (int): number of current test point to restore correct order in the end
+
+    Returns:
+        List: predicted labels (each test point gets appened and then
+              the new list will be passed to this method again)
+    """
+    pred_labels, number_of_channels = parameters[0:2]
+    save_classification, k = parameters[2:4]
+    labels_train, time_series_list_train = parameters[4:6]
     distances_per_test_point = []
     best_paths_per_test_point = []
     for time_series_train in tqdm(time_series_list_train, desc="Calculating DTW distance for one test point", leave=False):
@@ -131,8 +161,9 @@ def test_parallel(time_series_test, parameters, i):
         best_paths_per_train_point = []
         for channel in range(number_of_channels):
             # distance from one test point to all training points
-            best_path, d = metrics.dtw_path(np.array(time_series_test.iloc[:, 6:].iloc[:, [channel]]), np.array(time_series_train.iloc[:, 6:].iloc[:, [channel]]))
-            distances_per_train_point.append(d)
+            best_path, dist = metrics.dtw_path(np.array(time_series_test.iloc[:, 6:].iloc[:, [channel]]),
+                                               np.array(time_series_train.iloc[:, 6:].iloc[:, [channel]]))
+            distances_per_train_point.append(dist)
             best_paths_per_train_point.append(best_path)
 
         best_paths_per_test_point.append(best_paths_per_train_point)
@@ -146,21 +177,23 @@ def test_parallel(time_series_test, parameters, i):
 
     if save_classification:
         save_classification_data((index_time_series_list(time_series_list_train, nearest_neighbor_id), i),
-                                 (index_time_series_list(best_paths_per_test_point, nearest_neighbor_id), i), 
+                                 (index_time_series_list(best_paths_per_test_point, nearest_neighbor_id), i),
                                  (index_time_series_list(distances, nearest_neighbor_id), i),
                                  (index_time_series_list(distances_per_test_point, nearest_neighbor_id), i))
 
     pred_label = labels_train[nearest_neighbor_id]
-    # finds most frequently occurring label 
+    # finds most frequently occurring label
     pred_label = np.bincount(pred_label).argmax()
     pred_labels.append(pred_label)
 
-    find_nn_with_false_label(sorted_distances, labels_train, pred_label, time_series_list_train, save_classification)
+    find_nn_with_false_label(sorted_distances, labels_train, pred_label,
+                             time_series_list_train, save_classification)
 
     return pred_labels
 
 
-def find_nn_with_false_label(sorted_distances, labels_train, pred_label, time_series_list_train, save_classification):
+def find_nn_with_false_label(sorted_distances, labels_train, pred_label,
+                             time_series_list_train, save_classification):
     """find the nearest neighbor that has a different label than the predicted one and
        saves it if required. Method is useless if the result does not get saved.
 
@@ -169,7 +202,8 @@ def find_nn_with_false_label(sorted_distances, labels_train, pred_label, time_se
         labels_train (List): List of trianing labels
         pred_label (List): List of predicted Lbales
         time_series_list_train (List of time Series): List of time series for training
-        save_classification (bool, optional): Save the results of the classification. Defaults to False.
+        save_classification (bool, optional): Save the results of the classification.
+                                              Defaults to False.
     """
     if save_classification:
         i = 0

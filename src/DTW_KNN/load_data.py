@@ -1,7 +1,8 @@
 import pickle
 from save_data import connect_to_database
 
-def load_nn_with_false_label(collection_name="nn with false label", db_name="mongo", url="mongodb://localhost:27017/"):
+def load_nn_with_false_label(collection_name="nn with false label",
+                             db_name="mongo", url="mongodb://localhost:27017/"):
     """loads the nearest neighbor with a different label as the test point
 
     Args:
@@ -12,15 +13,16 @@ def load_nn_with_false_label(collection_name="nn with false label", db_name="mon
     Returns:
         DataFrame: the nearest neighbor with a different label as the test point
     """
-    _, collection = connect_to_database(collection_name)
+    _, collection = connect_to_database(collection_name, db_name=db_name, url=url)
     cursor = collection.find({})
-    nn = []
+    nearest_neighbor = []
     for data in cursor:
-        nn.append(pickle.loads(data["nn"]))
-    return nn
+        nearest_neighbor.append(pickle.loads(data["nn"]))
+    return nearest_neighbor
 
 
-def load_current_test_data(collection_name="current_test_data", db_name="mongo", url="mongodb://localhost:27017/"):
+def load_current_test_data(collection_name="current_test_data",
+                           db_name="mongo", url="mongodb://localhost:27017/"):
     """loads the current test data and converts it back to normal
 
     Args:
@@ -39,7 +41,8 @@ def load_current_test_data(collection_name="current_test_data", db_name="mongo",
     return test_data[0]
 
 
-def load_classification_data(collection_name="classification_data", db_name="mongo", url="mongodb://localhost:27017/"):
+def load_classification_data(collection_name="classification_data",
+                             db_name="mongo", url="mongodb://localhost:27017/"):
     """loads the classification data and transforms it back to normal
 
     Args:
@@ -61,7 +64,7 @@ def load_classification_data(collection_name="classification_data", db_name="mon
         best_paths.append(pickle.loads(data["best paths"]))
         best_distances.append(pickle.loads(data["best distances"]))
         distances_per_test_point.append(pickle.loads(data["distances per test point"]))
-    # last entry, because the elements get added to a list but the save operation is called after every 
+    # last entry, because the elements get added to a list but the save operation is called after every
     # append, so only after the last append everything is saved.
     return classification_data, best_paths, best_distances, distances_per_test_point
 

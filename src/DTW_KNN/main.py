@@ -1,17 +1,25 @@
 import time
+import click
 from classification import classify
 from find_hyperparameter import find_best_k
 from load_data import load_best_k
 from data_loader import load_data
-import click
+
 
 @click.command()
-@click.option('--use_saved_k', default=False, help='Want to use saved best k from earlier calls?')
-@click.option('--train_length', default=-1, help='Length of the train dataset. Use entire train set with -1 (default).')
-@click.option('--test_length', default=-1, help='Length of the test dataset. Use entire test set with -1 (default).')
-@click.option('--val_length', default=-1, help='Length of the validation dataset. Use entire validation set with -1 (default).')
-@click.option('--save_classification', default=False, help='Want to save the classification results?')
-def main(use_saved_k=False, train_length=-1, val_length=-1, test_length=-1, save_classification=False):
+@click.option('--use_saved_k', default=False,
+              help='Want to use saved best k from earlier calls?')
+@click.option('--train_length', default=-1,
+              help='Length of the train dataset. Use entire train set with -1 (default).')
+@click.option('--test_length', default=-1,
+              help='Length of the test dataset. Use entire test set with -1 (default).')
+@click.option('--val_length', default=-1,
+              help='Length of the validation dataset. Use entire validation set with -1 (default).')
+@click.option('--save_classification', default=False,
+              help='Want to save the classification results?')
+@click.option('--num_cores', default=-1,
+              help='Number of cores for multitasking. Use maximum number of cores - 2 with -1 (default)')
+def main(use_saved_k=False, train_length=-1, val_length=-1, test_length=-1, save_classification=False, num_cores=-1):
     """main method: Runs the entire clssification process."""
     train_length = int(train_length)
     test_length = int(test_length)
@@ -29,20 +37,17 @@ def main(use_saved_k=False, train_length=-1, val_length=-1, test_length=-1, save
     labvitals_time_series_list_val, labels_val = data[2], data[5]
 
     best_k = get_best_k(use_saved_k, labvitals_time_series_list_val, labels_val, k_list)
-    #dtw_matrices_train, dtw_matrices_test = get_distance_matrices(use_saved_matrices, labvitals_time_series_list_train,
-    #                                                              labvitals_time_series_list_test, train_length, test_length)
 
-    #classify_precomputed(dtw_matrices_train, dtw_matrices_test, labels_train, labels_test, test_length, best_k=best_k)
-
-    classify(labvitals_time_series_list_train, labvitals_time_series_list_test, labels_train,
-             labels_test, best_k=best_k, print_res=True, save_classification=save_classification)
+    classify(labvitals_time_series_list_train, labvitals_time_series_list_test,
+             labels_train, labels_test, best_k=best_k, print_res=True,
+             save_classification=save_classification, num_cores=num_cores)
 
     end = time.time()
     print("Time: {}".format(end - start))
 
 
 def get_best_k(use_saved_k, labvitals_time_series_list_val, labels_val, k_list):
-    """gets the best_k either from the database or from finding it 
+    """gets the best_k either from the database or from finding it
        with the help of the method find_best_k
 
     Args:
