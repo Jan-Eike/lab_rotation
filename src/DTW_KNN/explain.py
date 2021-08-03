@@ -44,6 +44,8 @@ def plot_explain(nearest_neighbor, labvitals_list_test, best_paths, nn, test_poi
         time_series_nn_with_false_label = np.array(nn_with_false_label.iloc[:, 6:].iloc[:, [channel]], dtype='float64').reshape(-1,)
         
         if plot_dtw:
+            print(best_paths[test_point][0][nn][channel])
+            print(len(time_series_1), len(time_series_2))
             fig, ax = dtwvis.plot_warping(time_series_1, time_series_2, best_paths[test_point][0][nn][channel])
             fig.set_size_inches(9, 5)
             fig.subplots_adjust(hspace=0.2)

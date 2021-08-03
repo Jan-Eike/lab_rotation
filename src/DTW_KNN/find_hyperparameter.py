@@ -58,7 +58,6 @@ def cross_validate(labvitals_time_series_list_val, labels_val, k):
         X_train = index_time_series_list(labvitals_time_series_list_val, train_index)
         X_test = index_time_series_list(labvitals_time_series_list_val, test_index)
         y_train , y_test = labels_val[train_index] , labels_val[test_index]
-        #dtw_matrices_train, dtw_matrices_test = calculate_distance_matrices(X_train, X_test, len(X_train), len(X_test))
         mean_score_auprc, mean_score_roc_auc= classify(X_train, X_test, y_train, y_test, best_k=k, print_res=False)
         scores_auprc.append(mean_score_auprc)
         scores_roc_auc.append(mean_score_roc_auc)

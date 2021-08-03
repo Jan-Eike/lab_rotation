@@ -1,6 +1,7 @@
 from inspect import Parameter
 import pandas as pd
 import numpy as np
+import ray
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import random
@@ -11,6 +12,7 @@ from tqdm import tqdm, trange
 from sklearn.metrics import average_precision_score, roc_auc_score
 from dtaidistance import dtw
 from tslearn import metrics
+from pqdm.processes import pqdm
 from save_data import (save_distance_matrices,
                        save_classification_data,
                        delete_classification_data, 
@@ -118,103 +120,6 @@ def get_labels(labvitals_time_series_list):
     return labels
 
 
-# not used anymore
-def calculate_distance_matrices(labvitals_time_series_list_train, labvitals_time_series_list_test, train_length, test_length, save=False, test_only=False):
-    """calculates dtw-distance matrices for both train and test set
-
-    Args:
-        labvitals_time_series_list_train (List of time Series): time series for training
-        labvitals_time_series_list_test (List of time Series): time Series for testing
-        train_length (int): length of training dataset (just for testing purposes)
-        test_length (int): length of test dataset (just for testing purposes)
-        save (bool, optional): Save matrices or not. Defaults to False.
-        test_only (bool, optional): Calculate test matrices only. Defaults to False.
-
-    Returns:
-        both lists of dtw-distance matrices
-    """
-    if test_only:
-        dtw_matrices_test = dtw_distance_per_channel(labvitals_time_series_list_train[:train_length], labvitals_time_series_list_test[:test_length], name="test")
-        return dtw_matrices_test
-    dtw_matrices_train = dtw_distance_per_channel(labvitals_time_series_list_train[:train_length], labvitals_time_series_list_train[:train_length], name="train")
-    dtw_matrices_test = dtw_distance_per_channel(labvitals_time_series_list_train[:train_length], labvitals_time_series_list_test[:test_length], name="test")
-    if save:
-        save_distance_matrices(dtw_matrices_train, "dtw_matrices_train")
-    return dtw_matrices_train, dtw_matrices_test
-
-
-# not used anymore
-def dtw_distance_per_channel(labvitals_time_series_list_1, labvitals_time_series_list_2, name="train"):
-    """calculates the dynamic time warping distance between each time series from
-       the first list and the second list. For each time Series, the distance between
-       each channel (column/dimesnion) gets calculated seperately.
-
-    Args:
-        labvitals_time_series_list_1 (List of time Series)
-        labvitals_time_series_list_2 (List of time Series)
-        name (str, optional): name of dataset for progress bar. Defaults to "train".
-
-    Returns:
-        List of Matrices: List of dynamic timewarping distance matrices. Each matrix
-                          corresponds to the distance regarding one dimension (column)
-    """
-    N = len(labvitals_time_series_list_1)
-    M = len(labvitals_time_series_list_2)
-    dynamic_time_warping_distance_matrices = []
-    # iloc[:, 6:] just cuts off the first 6 columns, since we don't need them for calculating anything
-    number_of_channels = labvitals_time_series_list_1[0].iloc[:, 6:].shape[1]
-    for channel in trange(number_of_channels, desc="claculating dtw-distance for {} dataset".format(name), leave=False):
-        dynamic_time_warping_distance_matrix = np.zeros((N,M))
-        for i, time_series_1 in enumerate(tqdm(labvitals_time_series_list_1, desc="claculating dtw-distance for one channel", leave=False)):
-            for j, time_series_2 in enumerate(labvitals_time_series_list_2):
-                # iloc[:, channel] takes the entire column with the number channel
-                dynamic_time_warping_distance_matrix[i,j] = dtw(time_series_1.iloc[:, 6:].iloc[:, channel], time_series_2.iloc[:, 6:].iloc[:, channel])
-        dynamic_time_warping_distance_matrices.append(dynamic_time_warping_distance_matrix)
-    return dynamic_time_warping_distance_matrices
-
-
-# not used anymore
-def classify_precomputed(dtw_matrices_train, dtw_matrices_test, labels_train, labels_test, test_length, best_k=4, print_res=True):
-    """
-    classifies the data
-
-    Args:
-        dtw_matrices_train (list of matrices): List of matrices containing the per channel distance for the training set
-        dtw_matrices_test (list of matrices): List of matrices containing the per channel distance for the test set
-        labels_train (list of integers): training labels
-        labels_test (list of integers): test labels
-        test_length (int): length of test dataset (just for testing purposes)
-        best_k (int, optional): best k for knn from cross validation. Defaults to 4.
-        print_res (bool, optional): True if you want to print result, otherwise false. Defaults to True.
-    
-    Returns:
-        float: mean acc_score of the classification
-        float: mean auprc_score of the classification
-    """
-    # use 'precomputed' as metric to plug in a distance matrix instead of a set of points in some space (point matrix).
-    nbrs = KNeighborsClassifier(n_neighbors=best_k, metric='precomputed')
-    scores_acc = []
-    scores_auprc = []
-    for i, dtw_matrix in enumerate(dtw_matrices_train):
-        nbrs.fit(dtw_matrix, labels_train)
-        pred_labels = nbrs.predict(dtw_matrices_test[i].reshape(test_length,-1))
-        score_auprc = average_precision_score(labels_test, pred_labels)
-        scores_auprc.append(score_auprc)
-        score_acc = nbrs.score(dtw_matrices_test[i].reshape(test_length,-1), labels_test)
-        scores_acc.append(score_acc)
-        if print_res:
-            print("Channel {} prediction:  {}".format(i, pred_labels))
-            print("Channel {} true labels: {}".format(i, labels_test))
-            print("Channel {} score_acc:   {}".format(i, score_acc))
-            print("Channel {} score_auprc: {}".format(i, score_auprc))
-    mean_score_acc = np.mean(scores_acc)
-    mean_score_auprc = np.mean(scores_auprc)
-    if print_res:
-        print("Mean score_acc:   {}".format(mean_score_acc))
-        print("Mean score_auprc: {}".format(mean_score_auprc))
-    return mean_score_acc, mean_score_auprc
-
-
 def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_test, best_k=5, print_res=True, save_classification=False):
     """classifies the test data wrt the given train data
 
@@ -274,16 +179,23 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
     # iloc[:, 6:] just cuts off the first 6 columns, since we don't need them for calculating anything
     number_of_channels = time_series_list_train[0].iloc[:, 6:].shape[1]
 
-    num_cores = multiprocessing.cpu_count() // 2
+    num_cores = multiprocessing.cpu_count() - 2
     parameters = (pred_labels, k_nearest_time_series, number_of_channels,
                   save_classification, k, labels_train, time_series_list_train)
-    inputs = tqdm(time_series_list_test, position=2, desc="Claculating DTW distance for entire test data", leave=False)
-    multiprocessing.freeze_support()
+    inputs = tqdm(time_series_list_test, desc="Claculating DTW distance for entire test data", leave=False, position=2)
     # parallel call for the method
-    pred_labels = Parallel(n_jobs=num_cores, backend="multiprocessing")(delayed(test_parallel)(input, parameters, i) for i, input in enumerate(inputs))
+    pred_labels = Parallel(n_jobs=num_cores)(delayed(test_parallel)(input, parameters, i) for i, input in enumerate(inputs))
 
     score_auprc = average_precision_score(labels_test, pred_labels)
     score_roc_auc = roc_auc_score(labels_test, pred_labels)
+    """
+    ray.init(log_to_driver=False)
+    for i, input in enumerate(inputs):
+        pred_labels.append(test_parallel.remote(input, parameters, i))
+    
+    score_auprc = average_precision_score(labels_test, pred_labels)
+    score_roc_auc = roc_auc_score(labels_test, pred_labels)
+    """
 
     # k_nearest_time_series:
     # [[nn_1, ..., nn_k], ..., [nn_1, ..., nn_k]]
@@ -360,33 +272,3 @@ def find_nn_with_false_label(sorted_distances, labels_train, pred_label, time_se
             dist = sorted_distances[i]
         nn_with_false_label = time_series_list_train[dist]
         save_nn_with_false_label(nn_with_false_label)
-
-
-def plot_time_series(k_nearest_time_series, number_of_channels):
-    plt.style.use('seaborn')
-    for i, time_series in enumerate(k_nearest_time_series):
-        print()
-        print("Time Series {}:\n {}".format(i, time_series[0].iloc[:, 6:]))
-        print()
-        sqrtn = int(np.ceil(np.sqrt(number_of_channels)))
-        fig = plt.figure(figsize=(sqrtn*2, sqrtn*2), dpi=300)
-        fig.tight_layout()
-        fig.subplots_adjust(wspace=0.5, hspace=0.9)
-        sqrtn1 = sqrtn
-        sqrtn2 = sqrtn
-        # don't want the figure to be too wide
-        if sqrtn >= 5:
-            sqrtn1 = 4
-            sqrtn2 = int(np.ceil((sqrtn * sqrtn) / sqrtn1))
-        gs = gridspec.GridSpec(sqrtn2, sqrtn1)
-        for i, channel_p in enumerate(time_series[0].iloc[:, 6:]):
-            ax = plt.subplot(gs[i])
-            ax.axes.get_xaxis().set_visible(False)
-            ax.axes.get_yaxis().set_visible(False)
-            xvalue = time_series[0]["chart_time"]
-            yvalue = time_series[0].iloc[:, 6:][channel_p]
-            ax.plot(xvalue, yvalue, linewidth=0.5, marker="s", markersize=1.5)
-            #ax.set_xticklabels(xvalue, fontsize=5)
-            #ax.set_yticklabels(yvalue, fontsize=5)
-            ax.set_title(channel_p, fontsize=5)
-        plt.show()
