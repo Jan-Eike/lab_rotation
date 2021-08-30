@@ -1,13 +1,21 @@
 import multiprocessing
+import time
+from typing import ContextManager
 import numpy as np
 from joblib import Parallel, delayed
 from tqdm import tqdm
+from multiprocessing import Pool
+from contextlib import contextmanager
+from operator import itemgetter
 from sklearn.metrics import average_precision_score, roc_auc_score
-from tslearn import metrics
+from dtw_utils import dtw_path
+from load_data import load_predicted_labels
 from save_data import (save_classification_data,
                        delete_classification_data,
                        save_current_test_data,
-                       save_nn_with_false_label)
+                       save_nn_with_false_label,
+                       save_predicted_labels,
+                       delete_predicted_labels)
 
 
 def index_time_series_list(time_series_list, index):
@@ -26,7 +34,7 @@ def index_time_series_list(time_series_list, index):
     return new_time_series_list
 
 
-def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_test,
+def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_test, pool, 
              best_k=5, print_res=True, save_classification=False, num_cores=-1):
     """classifies the test data wrt the given train data
 
@@ -45,31 +53,38 @@ def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_tes
         float: mean auprc score
         float: mean roc auc score
     """
-    scores_auprc = []
-    scores_roc_auc = []
     # delete old data if one wants to save new data
     if save_classification:
         delete_classification_data()
 
-    score_auprc, score_roc_auc = knn(labvitals_list_train, labvitals_list_test,
-                                    labels_train, labels_test, k=best_k,
-                                    save_classification=save_classification, num_cores=num_cores)
+    # always delete this, needed for parallelization
+    delete_predicted_labels()
+    knn(labvitals_list_train, labvitals_list_test,
+        labels_train, labels_test, pool, k=best_k,
+        save_classification=save_classification, num_cores=num_cores)
 
-    scores_auprc.append(score_auprc)
-    scores_roc_auc.append(score_roc_auc)
+    # get predicted labels from database (they were saved in knn method)
+    # resort them and only extract the labels and not the indices.
+    pred_labels = load_predicted_labels()
+    pred_labels = sorted(pred_labels, key=itemgetter(1))
+    pred_labels = list(map(list, zip(*pred_labels)))[0]
+
+    print(labels_test)
+    print(pred_labels)
+
+    mean_score_auprc = average_precision_score(labels_test, pred_labels)
+    mean_score_roc_auc = roc_auc_score(labels_test, pred_labels)
 
     if save_classification:
         save_current_test_data(labvitals_list_test)
 
-    mean_score_auprc = np.mean(scores_auprc)
-    mean_score_roc_auc = np.mean(scores_roc_auc)
     if print_res:
         print("Mean score_auprc:   {}".format(mean_score_auprc))
         print("Mean score_roc_auc: {}".format(mean_score_roc_auc))
     return mean_score_auprc, mean_score_roc_auc
 
 
-def knn(time_series_list_train, time_series_list_test, labels_train, labels_test,
+def knn(time_series_list_train, time_series_list_test, labels_train, labels_test, pool,
         k=5, save_classification=False, num_cores=-1):
     """perfomrs K nearest neighbors for the given train and test set.
 
@@ -91,32 +106,21 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
     # since we don't need them for calculating anything
     number_of_channels = time_series_list_train[0].iloc[:, 6:].shape[1]
 
-    cpu_count = multiprocessing.cpu_count()
-    if num_cores == -1 or num_cores < 1 or num_cores > cpu_count:
-        num_cores = cpu_count - 2
-
     parameters = (pred_labels, number_of_channels, save_classification,
                   k, labels_train, time_series_list_train)
 
     # create progress bar for time_series_list_test
     inputs = tqdm(time_series_list_test, desc="Claculating DTW distance for entire test data",
-                 leave=False, position=2)
+                 leave=True, position=2)
 
-    # parallel call for the method
-    pred_labels = Parallel(n_jobs=num_cores)(delayed(predict)(input, parameters, i)
-                                             for i, input in enumerate(inputs))
-
-    score_auprc = average_precision_score(labels_test, pred_labels)
-    score_roc_auc = roc_auc_score(labels_test, pred_labels)
+    # parallel call for the predict method
     """
-    ray.init(log_to_driver=False)
-    for i, input in enumerate(inputs):
-        pred_labels.append(test_parallel.remote(input, parameters, i))
-
-    score_auprc = average_precision_score(labels_test, pred_labels)
-    score_roc_auc = roc_auc_score(labels_test, pred_labels)
+    Parallel(n_jobs=num_cores, backend="loky")(delayed(predict)(input, parameters, i)
+                                    for i, input in enumerate(inputs))
     """
-
+    with poolcontext(processes=num_cores):
+        r = pool.map_async(predict_unpack, [(input, parameters, i) for i, input in enumerate(inputs)])
+        r.wait()
     # k_nearest_time_series:
     # [[nn_1, ..., nn_k], ..., [nn_1, ..., nn_k]]
     # one list for each test point
@@ -130,7 +134,6 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
 
     # best_distances:
     # [[], ..., []]
-    return score_auprc, score_roc_auc
 
 
 def predict(time_series_test, parameters, i):
@@ -156,18 +159,24 @@ def predict(time_series_test, parameters, i):
     labels_train, time_series_list_train = parameters[4:6]
     distances_per_test_point = []
     best_paths_per_test_point = []
+    dtw_matrices_per_test_point = []
     for time_series_train in tqdm(time_series_list_train, desc="Calculating DTW distance for one test point", leave=False):
         distances_per_train_point = []
         best_paths_per_train_point = []
+        dtw_matrices_per_train_point = []
         for channel in range(number_of_channels):
             # distance from one test point to all training points
-            best_path, dist = metrics.dtw_path(np.array(time_series_test.iloc[:, 6:].iloc[:, [channel]]),
-                                               np.array(time_series_train.iloc[:, 6:].iloc[:, [channel]]))
+            best_path, dist, dtw_matrix = dtw_path(np.array(time_series_test.iloc[:, 6:].iloc[:, [channel]]),
+                                                   np.array(time_series_train.iloc[:, 6:].iloc[:, [channel]]))
             distances_per_train_point.append(dist)
             best_paths_per_train_point.append(best_path)
+            dtw_matrices_per_train_point.append(dtw_matrix)
 
         best_paths_per_test_point.append(best_paths_per_train_point)
         distances_per_test_point.append(distances_per_train_point)
+        dtw_matrices_per_test_point.append(dtw_matrices_per_train_point)
+
+        del distances_per_train_point, best_paths_per_train_point, dtw_matrices_per_train_point, best_path, dist
 
     distances_per_test_point = np.array(distances_per_test_point)
     distances = np.mean(distances_per_test_point, axis=1)
@@ -179,18 +188,38 @@ def predict(time_series_test, parameters, i):
         save_classification_data((index_time_series_list(time_series_list_train, nearest_neighbor_id), i),
                                  (index_time_series_list(best_paths_per_test_point, nearest_neighbor_id), i),
                                  (index_time_series_list(distances, nearest_neighbor_id), i),
-                                 (index_time_series_list(distances_per_test_point, nearest_neighbor_id), i))
+                                 (index_time_series_list(distances_per_test_point, nearest_neighbor_id), i),
+                                 (index_time_series_list(dtw_matrices_per_test_point, nearest_neighbor_id), i))
 
     pred_label = labels_train[nearest_neighbor_id]
     # finds most frequently occurring label
     pred_label = np.bincount(pred_label).argmax()
-    pred_labels.append(pred_label)
+
+    # this will always be saved since it is needed for parallelization
+    save_predicted_labels((pred_label, i))
 
     find_nn_with_false_label(sorted_distances, labels_train, pred_label,
                              time_series_list_train, save_classification)
 
-    return pred_labels
+    del time_series_list_train, best_paths_per_test_point, distances, distances_per_test_point, pred_label
 
+    #return pred_labels
+
+
+def predict_unpack(args):
+    return predict(*args)
+
+
+@contextmanager
+def poolcontext(*args, **kwargs):
+    pool = multiprocessing.Pool(*args, **kwargs)
+    try:
+        yield pool
+    finally:
+        time.sleep(10)
+        pool.terminate()
+        pool.join()
+        pool.close()
 
 def find_nn_with_false_label(sorted_distances, labels_train, pred_label,
                              time_series_list_train, save_classification):
@@ -212,4 +241,4 @@ def find_nn_with_false_label(sorted_distances, labels_train, pred_label,
             i += 1
             dist = sorted_distances[i]
         nn_with_false_label = time_series_list_train[dist]
-        save_nn_with_false_label(nn_with_false_label)
+        save_nn_with_false_label(nn_with_false_label, true_label=pred_label, false_label=labels_train[dist])

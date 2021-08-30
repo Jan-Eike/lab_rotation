@@ -1,5 +1,6 @@
 import time
 import click
+import multiprocessing
 from classification import classify
 from find_hyperparameter import find_best_k
 from load_data import load_best_k
@@ -31,17 +32,23 @@ def main(use_saved_k=False, train_length=-1, val_length=-1, test_length=-1, save
 
     start = time.time()
 
+    cpu_count = multiprocessing.cpu_count()
+    if num_cores == -1 or num_cores < 1 or num_cores > cpu_count:
+        num_cores = cpu_count - 4
+    pool = multiprocessing.Pool(processes=num_cores, maxtasksperchild=10)
+
     data = load_data(train_length, test_length, val_length)
     labvitals_time_series_list_train, labels_train = data[0], data[3]
     labvitals_time_series_list_test, labels_test = data[1], data[4]
     labvitals_time_series_list_val, labels_val = data[2], data[5]
 
     best_k = get_best_k(use_saved_k, labvitals_time_series_list_val, labels_val, k_list)
+    best_k = 1
 
     classify(labvitals_time_series_list_train, labvitals_time_series_list_test,
-             labels_train, labels_test, best_k=best_k, print_res=True,
+             labels_train, labels_test, pool, best_k=best_k, print_res=True,
              save_classification=save_classification, num_cores=num_cores)
-
+    pool.close()
     end = time.time()
     print("Time: {}".format(end - start))
 

@@ -53,8 +53,11 @@ def get_time_series(data_frame, name="train"):
     Returns:
         List of time Series: a list of time series for each icustay_id
     """
-    # fill missing values with 0
-    data_frame = data_frame.fillna(0)
+    # fill missing values with mean of value before and after.
+    # if first or last value is nan, just take the value after or before.
+    data_frame = (data_frame.ffill()+data_frame.bfill())/2
+    #data_frame = data_frame.interpolate()
+    #data_frame = data_frame.bfill().ffill()
     # get a list of unique icustay_ids
     icustay_ids = set(list(data_frame["icustay_id"]))
     labvitals_time_series_list = []

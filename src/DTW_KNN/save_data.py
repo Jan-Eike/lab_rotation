@@ -74,7 +74,8 @@ def save_best_k(bets_result, collection_name="best_result",
 
 
 def save_classification_data(classification_data, best_paths, best_distances,
-                             distances_per_test_point, collection_name="classification_data",
+                             distances_per_test_point, dtw_matrices,
+                             collection_name="classification_data",
                              db_name="mongo", url="mongodb://localhost:27017/"):
     """saves the classification da as binary string
 
@@ -92,8 +93,10 @@ def save_classification_data(classification_data, best_paths, best_distances,
     best_paths = Binary(pickle.dumps(best_paths, protocol=2))
     best_distances = Binary(pickle.dumps(best_distances, protocol=2))
     distances_per_test_point = Binary(pickle.dumps(distances_per_test_point, protocol=2))
+    dtw_matrices = Binary(pickle.dumps(dtw_matrices, protocol=2))
     neighbor_dict = {"nearest neighbors" : serialized_classification_data, "best paths": best_paths,
-                     "best distances" : best_distances, "distances per test point": distances_per_test_point}
+                     "best distances" : best_distances, "distances per test point": distances_per_test_point,
+                     "dtw matrices" : dtw_matrices}
     collection.insert_one(neighbor_dict)
 
 
@@ -111,11 +114,10 @@ def delete_classification_data(collection_name="classification_data",
         db_name (str, optional): Name of the database. Defaults to "mongo".
         url (str, optional): url to the database. Defaults to "mongodb://localhost:27017/".
     """
-    data_base, collection = connect_to_database(collection_name, db_name=db_name, url=url)
-    data_base.drop_collection(collection)
-    data_base2, collection2 = connect_to_database(collection_name2)
-    data_base2.drop_collection(collection2)
-
+    database, collection = connect_to_database(collection_name, db_name=db_name, url=url)
+    database.drop_collection(collection)
+    database2, collection2 = connect_to_database(collection_name2)
+    database2.drop_collection(collection2)
 
 def save_current_test_data(test_data, collection_name="current_test_data",
                            db_name="mongo", url="mongodb://localhost:27017/"):
@@ -128,22 +130,47 @@ def save_current_test_data(test_data, collection_name="current_test_data",
         db_name (str, optional): Name of the database. Defaults to "mongo".
         url (str, optional): url to the database. Defaults to "mongodb://localhost:27017/".
     """
-    data_base, collection = connect_to_database(collection_name, db_name=db_name, url=url)
-    data_base.drop_collection(collection)
+    database, collection = connect_to_database(collection_name, db_name=db_name, url=url)
+    database.drop_collection(collection)
     collection.insert_one({"current test data" : Binary(pickle.dumps(test_data, protocol=2))})
 
 
-def save_nn_with_false_label(nn_with_false_label, collection_name="nn with false label"):
+def save_nn_with_false_label(nn_with_false_label, true_label, false_label, collection_name="nn with false label"):
     """saves the nearest neighbor with a different label as the test point
 
     Args:
-        nn_with_false_label (DataFrame): teh nearest neighbor DataFrame
+        nn_with_false_label (DataFrame): the nearest neighbor DataFrame
+        true_label (int): predicted label
+        false_label (int): label of nn_with_false_label
         collection_name (str, optional): name of the collection. Defaults to "nn with false label".
         db_name (str, optional): Name of the database. Defaults to "mongo".
         url (str, optional): url to the database. Defaults to "mongodb://localhost:27017/".
     """
     _, collection = connect_to_database(collection_name)
-    collection.insert_one({"nn" : Binary(pickle.dumps(nn_with_false_label))})
+    collection.insert_one({"nn" : Binary(pickle.dumps(nn_with_false_label)), 
+                           "true_label" : Binary(pickle.dumps(true_label)),
+                           "false_label" : Binary(pickle.dumps(false_label))})
+
+
+def save_predicted_labels(pred_labels, collection_name="predicted_labels"):
+    """saves predicted labels
+
+    Args:
+        pred_labels (list): list of predicted labels
+        collection_name (str, optional): name of the collection. Defaults to "dtw_matrices".
+    """
+    _, collection = connect_to_database(collection_name)
+    collection.insert_one({"pred_labels" : Binary(pickle.dumps(pred_labels))})
+
+
+def delete_predicted_labels(collection_name="predicted_labels"):
+    """deletes the predicted labels collection
+
+    Args:
+        collection_name (str, optional): name of the collection. Defaults to "predicted_labels".
+    """
+    database, collection = connect_to_database(collection_name)
+    database.drop_collection(collection)
 
 
 def connect_to_database(collection_name, db_name="mongo", url="mongodb://localhost:27017/"):
@@ -159,6 +186,6 @@ def connect_to_database(collection_name, db_name="mongo", url="mongodb://localho
         collection
     """
     client = MongoClient(url)
-    data_base = client[db_name]
-    collection = data_base[collection_name]
-    return data_base, collection
+    database = client[db_name]
+    collection = database[collection_name]
+    return database, collection
