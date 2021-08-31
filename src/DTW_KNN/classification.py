@@ -118,7 +118,7 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
     Parallel(n_jobs=num_cores, backend="loky")(delayed(predict)(input, parameters, i)
                                     for i, input in enumerate(inputs))
     """
-    with poolcontext(processes=num_cores):
+    with poolcontext(processes=num_cores) as pool:
         r = pool.map_async(predict_unpack, [(input, parameters, i) for i, input in enumerate(inputs)])
         r.wait()
     # k_nearest_time_series:
@@ -166,8 +166,11 @@ def predict(time_series_test, parameters, i):
         dtw_matrices_per_train_point = []
         for channel in range(number_of_channels):
             # distance from one test point to all training points
-            best_path, dist, dtw_matrix = dtw_path(np.array(time_series_test.iloc[:, 6:].iloc[:, [channel]]),
-                                                   np.array(time_series_train.iloc[:, 6:].iloc[:, [channel]]))
+            s1 = np.array(time_series_test.iloc[:, 6:].iloc[:, [channel]]).copy()
+            s2 = np.array(time_series_train.iloc[:, 6:].iloc[:, [channel]]).copy()
+            if s1.shape[0] != 0 and s2.shape[0] != 0:
+                best_path, dist, dtw_matrix = dtw_path(s1,s2)
+                
             distances_per_train_point.append(dist)
             best_paths_per_train_point.append(best_path)
             dtw_matrices_per_train_point.append(dtw_matrix)

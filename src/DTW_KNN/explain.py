@@ -62,6 +62,7 @@ def plot_explain(nearest_neighbor, labvitals_list_test, best_paths, nn, test_poi
                 distances.append(dtw_matrices[channel][point])
             print(["{:.2f}".format(i) for i in distances])
             print(distances)
+            #index_largest_gap = np.argsort(np.diff(lam))[::-1][:-1]
             differences = sorted([j-i for i, j in zip(distances[:-1], distances[1:])])
             print(differences)
             distance_mean = np.mean(differences)

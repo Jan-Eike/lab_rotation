@@ -21,19 +21,9 @@ def load_data(train_length, test_length, val_length):
     labvitals_train = pd.read_csv("C:\\Users\\Jan\\Desktop\\project\\MGP-AttTCN\\data\\train\\full_labvitals.csv")
     labvitals_test = pd.read_csv("C:\\Users\\Jan\\Desktop\\project\\MGP-AttTCN\\data\\test\\full_labvitals.csv")
     labvitals_val = pd.read_csv("C:\\Users\\Jan\\Desktop\\project\\MGP-AttTCN\\data\\val\\full_labvitals.csv")
-    random.seed(10)
-    if train_length != -1:
-        labvitals_time_series_list_train = random.sample(get_time_series(labvitals_train, name="train"), train_length)
-    else:
-        labvitals_time_series_list_train = get_time_series(labvitals_train, name="train")
-    if test_length != -1:
-        labvitals_time_series_list_test = random.sample(get_time_series(labvitals_test, name="test"), test_length)
-    else:
-        labvitals_time_series_list_test = get_time_series(labvitals_test, name="test")
-    if val_length != -1:
-        labvitals_time_series_list_val = random.sample(get_time_series(labvitals_val, name="val"), val_length)
-    else:
-        labvitals_time_series_list_val = get_time_series(labvitals_val, name="val")
+    labvitals_time_series_list_train = get_time_series(labvitals_train, name="train")[:train_length]
+    labvitals_time_series_list_test = get_time_series(labvitals_test, name="test")[:test_length]
+    labvitals_time_series_list_val = get_time_series(labvitals_val, name="val")[:val_length]
     labels_train = get_labels(labvitals_time_series_list_train)
     labels_test = get_labels(labvitals_time_series_list_test)
     labels_val = get_labels(labvitals_time_series_list_val)
@@ -57,7 +47,7 @@ def get_time_series(data_frame, name="train"):
     # if first or last value is nan, just take the value after or before.
     data_frame = (data_frame.ffill()+data_frame.bfill())/2
     #data_frame = data_frame.interpolate()
-    #data_frame = data_frame.bfill().ffill()
+    data_frame = data_frame.bfill().ffill()
     # get a list of unique icustay_ids
     icustay_ids = set(list(data_frame["icustay_id"]))
     labvitals_time_series_list = []

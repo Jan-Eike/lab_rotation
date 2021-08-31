@@ -43,7 +43,6 @@ def main(use_saved_k=False, train_length=-1, val_length=-1, test_length=-1, save
     labvitals_time_series_list_val, labels_val = data[2], data[5]
 
     best_k = get_best_k(use_saved_k, labvitals_time_series_list_val, labels_val, k_list)
-    best_k = 1
 
     classify(labvitals_time_series_list_train, labvitals_time_series_list_test,
              labels_train, labels_test, pool, best_k=best_k, print_res=True,
