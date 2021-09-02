@@ -1,5 +1,6 @@
 import multiprocessing
 import time
+import math
 from typing import ContextManager
 import numpy as np
 from joblib import Parallel, delayed
@@ -34,7 +35,7 @@ def index_time_series_list(time_series_list, index):
     return new_time_series_list
 
 
-def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_test, pool, 
+def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_test, test_length, 
              best_k=5, print_res=True, save_classification=False, num_cores=-1):
     """classifies the test data wrt the given train data
 
@@ -59,8 +60,13 @@ def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_tes
 
     # always delete this, needed for parallelization
     delete_predicted_labels()
+
+    cpu_count = multiprocessing.cpu_count()
+    if num_cores == -1 or num_cores < 1 or num_cores > cpu_count:
+        num_cores = cpu_count - 4
+
     knn(labvitals_list_train, labvitals_list_test,
-        labels_train, labels_test, pool, k=best_k,
+        labels_train, labels_test, test_length, k=best_k,
         save_classification=save_classification, num_cores=num_cores)
 
     # get predicted labels from database (they were saved in knn method)
@@ -84,7 +90,7 @@ def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_tes
     return mean_score_auprc, mean_score_roc_auc
 
 
-def knn(time_series_list_train, time_series_list_test, labels_train, labels_test, pool,
+def knn(time_series_list_train, time_series_list_test, labels_train, labels_test, test_length,
         k=5, save_classification=False, num_cores=-1):
     """perfomrs K nearest neighbors for the given train and test set.
 
@@ -106,21 +112,22 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
     # since we don't need them for calculating anything
     number_of_channels = time_series_list_train[0].iloc[:, 6:].shape[1]
 
-    parameters = (pred_labels, number_of_channels, save_classification,
-                  k, labels_train, time_series_list_train)
-
-    # create progress bar for time_series_list_test
-    inputs = tqdm(time_series_list_test, desc="Claculating DTW distance for entire test data",
-                 leave=True, position=2)
-
     # parallel call for the predict method
     """
     Parallel(n_jobs=num_cores, backend="loky")(delayed(predict)(input, parameters, i)
                                     for i, input in enumerate(inputs))
     """
-    with poolcontext(processes=num_cores) as pool:
-        r = pool.map_async(predict_unpack, [(input, parameters, i) for i, input in enumerate(inputs)])
-        r.wait()
+    split = 100
+    for it in range(math.ceil(test_length / split)):
+        parameters = (pred_labels, number_of_channels, save_classification,
+                  k, labels_train, time_series_list_train)
+        
+        # create progress bar for time_series_list_test
+        inputs = tqdm(time_series_list_test[it*split:(it+1)*split], desc="Claculating DTW distance for entire test data",
+                 leave=True, position=2)
+        with poolcontext(processes=num_cores) as pool:
+            r = pool.map_async(predict_unpack, [(input, parameters, i+split) for i, input in enumerate(inputs)])
+            r.wait()
     # k_nearest_time_series:
     # [[nn_1, ..., nn_k], ..., [nn_1, ..., nn_k]]
     # one list for each test point
@@ -223,6 +230,7 @@ def poolcontext(*args, **kwargs):
         pool.terminate()
         pool.join()
         pool.close()
+
 
 def find_nn_with_false_label(sorted_distances, labels_train, pred_label,
                              time_series_list_train, save_classification):

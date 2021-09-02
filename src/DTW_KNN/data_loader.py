@@ -33,8 +33,6 @@ def load_data(train_length, test_length, val_length):
 
 def get_time_series(data_frame, name="train"):
     """creates a list of time series for the given file.
-       each missing value gets filled up with 0 since it is assumed to be
-       within a healthy norm, as discussed in Rosnati et al.
 
     Args:
         data_frame (Pandas DataFrame) dataset as Pandas DataFrame
