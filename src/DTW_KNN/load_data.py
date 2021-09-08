@@ -1,4 +1,6 @@
 import pickle
+import gridfs
+from pymongo import MongoClient
 from save_data import connect_to_database
 
 def load_nn_with_false_label(collection_name="nn with false label"):
@@ -54,16 +56,12 @@ def load_classification_data(collection_name="classification_data"):
     best_distances = []
     best_paths = []
     distances_per_test_point = []
-    dtw_matrices = []
     for data in cursor:
         classification_data.append(pickle.loads(data["nearest neighbors"]))
         best_paths.append(pickle.loads(data["best paths"]))
         best_distances.append(pickle.loads(data["best distances"]))
         distances_per_test_point.append(pickle.loads(data["distances per test point"]))
-        dtw_matrices.append(pickle.loads(data["dtw matrices"]))
-    # last entry, because the elements get added to a list but the save operation is called after every
-    # append, so only after the last append everything is saved.
-    return classification_data, best_paths, best_distances, distances_per_test_point, dtw_matrices
+    return classification_data, best_paths, best_distances, distances_per_test_point
 
 
 
@@ -91,3 +89,28 @@ def load_predicted_labels(collection_name="predicted_labels"):
     for pred_label in cursor:
         pred_labels.append(pickle.loads(pred_label["pred_labels"]))
     return pred_labels
+
+
+def load_test_labels(collection_name="test_labels"):
+    _, collection = connect_to_database(collection_name)
+    cursor = collection.find({})
+    test_labels = []
+    for test_label in cursor:
+        test_labels.append(pickle.loads(test_label["test_labels"]))
+    return test_labels
+
+
+def load_dtw_matrices(collection_name1="fs.files", collection_name2="fs.chunks",
+                      url="mongodb://localhost:27017/"):
+    _, collection1 = connect_to_database(collection_name1)
+    cursor = collection1.find({})
+    ids = []
+    for file in cursor:
+        ids.append(file["_id"])
+    
+    db = MongoClient(url).mongo
+    fs = gridfs.GridFS(db)
+    dtw_matrices = []
+    for id in ids:
+        dtw_matrices.append(pickle.loads(fs.get(id).read()))
+    return dtw_matrices

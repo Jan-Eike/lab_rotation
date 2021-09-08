@@ -84,7 +84,7 @@ def dtw_path(s1, s2):
     mask = np.zeros((s1.shape[0], s2.shape[0]))
     acc_cost_mat = get_matrix(s1, s2, mask=mask)
     path = return_path(acc_cost_mat)
-    return path, np.sqrt(acc_cost_mat[-1, -1]), acc_cost_mat
+    return np.sqrt(acc_cost_mat[-1, -1])
 
 
 def to_time_series(ts, remove_nans=False):

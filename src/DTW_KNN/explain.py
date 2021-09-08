@@ -6,13 +6,15 @@ from explainability_utils import plot_warping
 from dtw_utils import dtw_path
 from load_data import (load_classification_data,
                        load_current_test_data, 
-                       load_nn_with_false_label)
+                       load_nn_with_false_label,
+                       load_dtw_matrices)
 
 
 def main():
     """Main method for explainabilty.
     """
-    k_nearest_time_series, best_paths, best_distances, distances_per_test_point, dtw_matrices  = load_classification_data()
+    k_nearest_time_series, best_paths, best_distances, distances_per_test_point  = load_classification_data()
+    dtw_matrices = load_dtw_matrices()
     labvitals_list_test = load_current_test_data()
     nn_with_false_label, true_label, false_label = load_nn_with_false_label()
     # re-sort everything because parallelization mixes up the order randomly

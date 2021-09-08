@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 
-def load_data(train_length, test_length, val_length):
+def load_data(train_length, test_length_start, test_length_end, val_length):
     """loads data from the csv files, gets the time series from that data
        and gets the labels out of that data.
 
@@ -18,11 +18,11 @@ def load_data(train_length, test_length, val_length):
     # We extract our data from the full_labvitals.csv dataset.
     # labvitals are both vital parameters and laboratory parameters,
     # as one can see in Table A.1 in Moor et al.
-    labvitals_train = pd.read_csv("C:\\Users\\Jan\\Desktop\\project\\MGP-AttTCN\\data\\train\\full_labvitals.csv")
-    labvitals_test = pd.read_csv("C:\\Users\\Jan\\Desktop\\project\\MGP-AttTCN\\data\\test\\full_labvitals.csv")
-    labvitals_val = pd.read_csv("C:\\Users\\Jan\\Desktop\\project\\MGP-AttTCN\\data\\val\\full_labvitals.csv")
+    labvitals_train = pd.read_csv("C:\\Users\\Jan\\Desktop\\project\\DTW-KNN\\data\\train\\full_labvitals.csv")
+    labvitals_test = pd.read_csv("C:\\Users\\Jan\\Desktop\\project\\DTW-KNN\\data\\test\\full_labvitals.csv")
+    labvitals_val = pd.read_csv("C:\\Users\\Jan\\Desktop\\project\\DTW-KNN\\data\\val\\full_labvitals.csv")
     labvitals_time_series_list_train = get_time_series(labvitals_train, name="train")[:train_length]
-    labvitals_time_series_list_test = get_time_series(labvitals_test, name="test")[:test_length]
+    labvitals_time_series_list_test = get_time_series(labvitals_test, name="test")[test_length_start:test_length_end]
     labvitals_time_series_list_val = get_time_series(labvitals_val, name="val")[:val_length]
     labels_train = get_labels(labvitals_time_series_list_train)
     labels_test = get_labels(labvitals_time_series_list_test)

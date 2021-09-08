@@ -10,7 +10,8 @@ from contextlib import contextmanager
 from operator import itemgetter
 from sklearn.metrics import average_precision_score, roc_auc_score
 from dtw_utils import dtw_path
-from load_data import load_predicted_labels
+from size import getsize
+from load_data import load_predicted_labels, load_test_labels
 from save_data import (save_classification_data,
                        delete_classification_data,
                        save_current_test_data,
@@ -35,8 +36,8 @@ def index_time_series_list(time_series_list, index):
     return new_time_series_list
 
 
-def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_test, test_length, 
-             best_k=5, print_res=True, save_classification=False, num_cores=-1):
+def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_test, test_length_start, test_length, 
+             best_k=5, print_res=True, save_classification=False, num_cores=-1, result=True):
     """classifies the test data wrt the given train data
 
     Args:
@@ -56,41 +57,50 @@ def classify(labvitals_list_train, labvitals_list_test, labels_train, labels_tes
     """
     # delete old data if one wants to save new data
     if save_classification:
-        delete_classification_data()
+        #delete_classification_data()
+        pass
 
     # always delete this, needed for parallelization
-    delete_predicted_labels()
+    #delete_predicted_labels()
 
     cpu_count = multiprocessing.cpu_count()
     if num_cores == -1 or num_cores < 1 or num_cores > cpu_count:
         num_cores = cpu_count - 4
 
     knn(labvitals_list_train, labvitals_list_test,
-        labels_train, labels_test, test_length, k=best_k,
+        labels_train, test_length_start, test_length, k=best_k,
         save_classification=save_classification, num_cores=num_cores)
 
     # get predicted labels from database (they were saved in knn method)
     # resort them and only extract the labels and not the indices.
-    pred_labels = load_predicted_labels()
-    pred_labels = sorted(pred_labels, key=itemgetter(1))
-    pred_labels = list(map(list, zip(*pred_labels)))[0]
+    if result:
+        labels_test = load_test_labels()
+        labels_test = sorted(labels_test, key=itemgetter(1))
+        labels_test = list(map(list, zip(*labels_test)))[0]
+        labels_test = [item for sublist in labels_test for item in sublist]
+        pred_labels = load_predicted_labels()
+        pred_labels = sorted(pred_labels, key=itemgetter(1))
+        pred_labels = list(map(list, zip(*pred_labels)))[0]
+        print(labels_test)
+        print(pred_labels)
 
-    print(labels_test)
-    print(pred_labels)
+        mean_score_auprc = average_precision_score(labels_test, pred_labels)
+        mean_score_roc_auc = roc_auc_score(labels_test, pred_labels)
 
-    mean_score_auprc = average_precision_score(labels_test, pred_labels)
-    mean_score_roc_auc = roc_auc_score(labels_test, pred_labels)
+        if print_res:
+            print("Mean score_auprc:   {}".format(mean_score_auprc))
+            print("Mean score_roc_auc: {}".format(mean_score_roc_auc))
+    else:
+        mean_score_auprc = -1
+        mean_score_roc_auc = -1
 
     if save_classification:
         save_current_test_data(labvitals_list_test)
 
-    if print_res:
-        print("Mean score_auprc:   {}".format(mean_score_auprc))
-        print("Mean score_roc_auc: {}".format(mean_score_roc_auc))
     return mean_score_auprc, mean_score_roc_auc
 
 
-def knn(time_series_list_train, time_series_list_test, labels_train, labels_test, test_length,
+def knn(time_series_list_train, time_series_list_test, labels_train, test_length_start, test_length,
         k=5, save_classification=False, num_cores=-1):
     """perfomrs K nearest neighbors for the given train and test set.
 
@@ -126,7 +136,9 @@ def knn(time_series_list_train, time_series_list_test, labels_train, labels_test
         inputs = tqdm(time_series_list_test[it*split:(it+1)*split], desc="Claculating DTW distance for entire test data",
                  leave=True, position=2)
         with poolcontext(processes=num_cores) as pool:
-            r = pool.map_async(predict_unpack, [(input, parameters, i+split) for i, input in enumerate(inputs)])
+            print(test_length_start)
+            print(len(inputs))
+            r = pool.map_async(predict_unpack, [(input, parameters, i+it*split+test_length_start) for i, input in enumerate(inputs)])
             r.wait()
     # k_nearest_time_series:
     # [[nn_1, ..., nn_k], ..., [nn_1, ..., nn_k]]
@@ -169,49 +181,50 @@ def predict(time_series_test, parameters, i):
     dtw_matrices_per_test_point = []
     for time_series_train in tqdm(time_series_list_train, desc="Calculating DTW distance for one test point", leave=False):
         distances_per_train_point = []
-        best_paths_per_train_point = []
-        dtw_matrices_per_train_point = []
+        #best_paths_per_train_point = []
+        #dtw_matrices_per_train_point = []
         for channel in range(number_of_channels):
             # distance from one test point to all training points
-            s1 = np.array(time_series_test.iloc[:, 6:].iloc[:, [channel]]).copy()
-            s2 = np.array(time_series_train.iloc[:, 6:].iloc[:, [channel]]).copy()
-            if s1.shape[0] != 0 and s2.shape[0] != 0:
-                best_path, dist, dtw_matrix = dtw_path(s1,s2)
-                
+            s1 = np.array(time_series_test.iloc[:, 6:].iloc[:, [channel]])
+            s2 = np.array(time_series_train.iloc[:, 6:].iloc[:, [channel]])
+            dist = dtw_path(s1,s2)
             distances_per_train_point.append(dist)
-            best_paths_per_train_point.append(best_path)
-            dtw_matrices_per_train_point.append(dtw_matrix)
-
-        best_paths_per_test_point.append(best_paths_per_train_point)
+            #best_paths_per_train_point.append(best_path)
+            #dtw_matrices_per_train_point.append(dtw_matrix)
+    
+        #best_paths_per_test_point.append(best_paths_per_train_point)
         distances_per_test_point.append(distances_per_train_point)
-        dtw_matrices_per_test_point.append(dtw_matrices_per_train_point)
+        #dtw_matrices_per_test_point.append(dtw_matrices_per_train_point)
 
-        del distances_per_train_point, best_paths_per_train_point, dtw_matrices_per_train_point, best_path, dist
-
+        #del distances_per_train_point, best_paths_per_train_point, dtw_matrices_per_train_point, best_path, dist
     distances_per_test_point = np.array(distances_per_test_point)
     distances = np.mean(distances_per_test_point, axis=1)
-
     sorted_distances = np.argsort(distances)
     nearest_neighbor_id = sorted_distances[:k]
 
+    #print("{}".format(getsize((dtw_matrices_per_test_point, distances_per_test_point, distances, best_paths_per_test_point, time_series_list_train))))
+
     if save_classification:
+        """
         save_classification_data((index_time_series_list(time_series_list_train, nearest_neighbor_id), i),
                                  (index_time_series_list(best_paths_per_test_point, nearest_neighbor_id), i),
                                  (index_time_series_list(distances, nearest_neighbor_id), i),
                                  (index_time_series_list(distances_per_test_point, nearest_neighbor_id), i),
                                  (index_time_series_list(dtw_matrices_per_test_point, nearest_neighbor_id), i))
+        """
+        save_classification_data((index_time_series_list(time_series_list_train, nearest_neighbor_id), i),
+                                 (index_time_series_list(distances, nearest_neighbor_id), i))
 
     pred_label = labels_train[nearest_neighbor_id]
     # finds most frequently occurring label
     pred_label = np.bincount(pred_label).argmax()
-
     # this will always be saved since it is needed for parallelization
     save_predicted_labels((pred_label, i))
 
     find_nn_with_false_label(sorted_distances, labels_train, pred_label,
                              time_series_list_train, save_classification)
 
-    del time_series_list_train, best_paths_per_test_point, distances, distances_per_test_point, pred_label
+    #del time_series_list_train, best_paths_per_test_point, distances, distances_per_test_point, pred_label
 
     #return pred_labels
 
@@ -226,7 +239,7 @@ def poolcontext(*args, **kwargs):
     try:
         yield pool
     finally:
-        time.sleep(10)
+        time.sleep(2)
         pool.terminate()
         pool.join()
         pool.close()
